@@ -4,77 +4,34 @@ import PageHeader from '../components/PageHeader'
 import Card from '../components/Card'
 import LinkedItems from '../components/LinkedItems'
 import { JournalService, PortfolioService } from '@/domain/services'
-import type { JournalEntry, Position, PortfolioAction } from '@/domain/types/entities'
+import type { JournalEntry, Position, ActionType } from '@/domain/types/entities'
 
-type ActionType = PortfolioAction['actionType']
+const ACTION_COLORS: Record<ActionType, string> = {
+  buy: '#10b981',
+  sell: '#ef4444',
+  long: '#3b82f6',
+  short: '#f59e0b',
+  deposit: '#6366f1',
+  withdraw: '#8b5cf6',
+}
 
 export default function JournalDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [entry, setEntry] = useState<JournalEntry | null>(null)
-  const [positions, setPositions] = useState<Position[]>([])
-
-  // Portfolio action form state
-  const [showActionForm, setShowActionForm] = useState(false)
-  const [actionType, setActionType] = useState<ActionType>('set_position')
-  const [selectedPositionId, setSelectedPositionId] = useState('')
-  const [ticker, setTicker] = useState('')
-  const [quantity, setQuantity] = useState('')
-  const [price, setPrice] = useState('')
-  const [actionError, setActionError] = useState('')
+  const [position, setPosition] = useState<Position | null>(null)
 
   useEffect(() => {
     if (!id) return
     const data = JournalService.get(id)
     setEntry(data)
-    setPositions(PortfolioService.list(false)) // active positions only
-  }, [id])
 
-  const loadData = () => {
-    if (!id) return
-    const data = JournalService.get(id)
-    setEntry(data)
-    setPositions(PortfolioService.list(false)) // active positions only
-  }
-
-  // Determine if this is a new-position action
-  const needsNewPosition = actionType === 'set_position'
-  const needsExistingPosition = actionType === 'buy' || actionType === 'sell' || actionType === 'close_position'
-
-  const resetActionForm = () => {
-    setShowActionForm(false)
-    setActionType('set_position')
-    setSelectedPositionId('')
-    setTicker('')
-    setQuantity('')
-    setPrice('')
-    setActionError('')
-  }
-
-  const handleExecuteAction = () => {
-    if (!id || !entry) return
-    setActionError('')
-
-    try {
-      const action: PortfolioAction = {
-        actionType,
-        quantity: parseFloat(quantity),
-        price: parseFloat(price),
-      }
-
-      if (needsNewPosition) {
-        action.ticker = ticker.trim().toUpperCase()
-      } else if (needsExistingPosition) {
-        action.positionId = selectedPositionId
-      }
-
-      JournalService.executePortfolioAction(id, action)
-      resetActionForm()
-      loadData()
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed to execute action')
+    // Load related position if available
+    if (data?.positionId) {
+      const pos = PortfolioService.get(data.positionId)
+      setPosition(pos)
     }
-  }
+  }, [id])
 
   const handleArchive = () => {
     if (!id) return
@@ -84,34 +41,9 @@ export default function JournalDetail() {
     navigate('/journal')
   }
 
-  // Get max sellable quantity for sell action
-  const getMaxSellQuantity = (): number => {
-    if (actionType !== 'sell' || !selectedPositionId) return 0
-    const pos = positions.find(p => p.id === selectedPositionId)
-    return pos?.quantity || 0
-  }
-
-  const isActionFormValid = (): boolean => {
-    const qty = parseFloat(quantity)
-    const prc = parseFloat(price)
-    if (isNaN(qty) || qty <= 0) return false
-    if (isNaN(prc) || prc < 0) return false
-
-    if (needsNewPosition && !ticker.trim()) return false
-    if (needsExistingPosition && !selectedPositionId) return false
-
-    // For sell, check quantity doesn't exceed held
-    if (actionType === 'sell') {
-      const maxQty = getMaxSellQuantity()
-      if (qty > maxQty) return false
-    }
-
-    return true
-  }
-
   const header = (
     <PageHeader
-      title="Journal Entry"
+      title="Trade Details"
       actionButton={
         <Link
           to="/journal"
@@ -141,328 +73,345 @@ export default function JournalDetail() {
     )
   }
 
-  const typeBadgeColor = {
-    decision: '#3b82f6',
-    reflection: '#8b5cf6',
-    note: '#6b7280',
-  }[entry.type]
+  const value = entry.quantity * entry.price
+  const actionColor = ACTION_COLORS[entry.actionType] || '#6b7280'
+  const isCashAction = entry.actionType === 'deposit' || entry.actionType === 'withdraw'
 
   return (
     <>
       {header}
 
+      {/* Main Trade Info */}
       <Card>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#1f2937', margin: 0 }}>
-            {entry.title}
-          </h2>
-          <span style={{
-            padding: '0.25rem 0.625rem',
-            backgroundColor: typeBadgeColor,
-            color: 'white',
-            borderRadius: '0.25rem',
-            fontSize: '0.75rem',
-            fontWeight: '600',
-            textTransform: 'capitalize',
-          }}>
-            {entry.type}
-          </span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+          <div>
+            <span style={{
+              display: 'inline-block',
+              padding: '0.25rem 0.625rem',
+              backgroundColor: actionColor,
+              color: 'white',
+              borderRadius: '0.25rem',
+              fontSize: '0.75rem',
+              fontWeight: '600',
+              textTransform: 'uppercase',
+              marginBottom: '0.5rem',
+            }}>
+              {entry.actionType}
+            </span>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#1f2937', margin: 0 }}>
+              {entry.ticker}
+            </h2>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '1.25rem', fontWeight: '600', color: '#1f2937' }}>
+              ${value.toFixed(2)}
+            </div>
+            <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+              Total Value
+            </div>
+          </div>
         </div>
-        <p style={{ color: '#374151', fontSize: '1rem', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
-          {entry.content}
-        </p>
-        <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #e5e7eb' }}>
-          <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}>
-            Created: {new Date(entry.createdAt).toLocaleString()}
-          </span>
-          {entry.updatedAt !== entry.createdAt && (
-            <>
-              <br />
-              <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}>
-                Updated: {new Date(entry.updatedAt).toLocaleString()}
-              </span>
-            </>
+
+        {/* Transaction Details */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, 1fr)',
+          gap: '1rem',
+          padding: '1rem',
+          backgroundColor: '#f9fafb',
+          borderRadius: '0.375rem',
+        }}>
+          <div>
+            <div style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.125rem' }}>
+              {isCashAction ? 'Amount' : 'Quantity'}
+            </div>
+            <div style={{ fontSize: '1rem', fontWeight: '500', color: '#1f2937' }}>
+              {entry.quantity}
+            </div>
+          </div>
+          {!isCashAction && (
+            <div>
+              <div style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.125rem' }}>Price</div>
+              <div style={{ fontSize: '1rem', fontWeight: '500', color: '#1f2937' }}>
+                ${entry.price.toFixed(2)}
+              </div>
+            </div>
           )}
+          <div>
+            <div style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.125rem' }}>Entry Time</div>
+            <div style={{ fontSize: '1rem', fontWeight: '500', color: '#1f2937' }}>
+              {new Date(entry.entryTime || entry.createdAt).toLocaleString()}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.125rem' }}>Position</div>
+            <div style={{ fontSize: '1rem', fontWeight: '500', color: '#1f2937' }}>
+              {entry.positionMode === 'new' ? 'New' : 'Existing'}
+            </div>
+          </div>
         </div>
       </Card>
 
-      {entry.portfolioAction && (
+      {/* Payment Info (for buys) */}
+      {entry.payment && (
         <Card>
-          <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.75rem' }}>
-            Portfolio Action
-          </h2>
+          <h3 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '0.75rem', color: '#374151' }}>
+            Payment Details
+          </h3>
           <div style={{
             padding: '0.75rem',
-            backgroundColor: '#f0fdf4',
+            backgroundColor: '#fef3c7',
             borderRadius: '0.375rem',
-            borderLeft: '3px solid #10b981',
+            border: '1px solid #fcd34d',
           }}>
-            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>Action</span>
-                <p style={{ fontWeight: '500', textTransform: 'uppercase' }}>
-                  {entry.portfolioAction.actionType.replace('_', ' ')}
-                </p>
-              </div>
-              {entry.portfolioAction.ticker && (
-                <div>
-                  <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>Ticker</span>
-                  <p style={{ fontWeight: '500' }}>{entry.portfolioAction.ticker}</p>
+                <div style={{ fontSize: '0.75rem', color: '#92400e' }}>Paid with</div>
+                <div style={{ fontSize: '1rem', fontWeight: '500', color: '#78350f' }}>
+                  {entry.payment.amount.toFixed(2)} {entry.payment.asset}
                 </div>
+              </div>
+              {entry.payment.isNewMoney && (
+                <span style={{
+                  padding: '0.25rem 0.5rem',
+                  backgroundColor: '#fbbf24',
+                  color: '#78350f',
+                  borderRadius: '0.25rem',
+                  fontSize: '0.75rem',
+                  fontWeight: '500',
+                }}>
+                  New Money
+                </span>
               )}
-              <div>
-                <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>Quantity</span>
-                <p style={{ fontWeight: '500' }}>{entry.portfolioAction.quantity}</p>
-              </div>
-              <div>
-                <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>Price</span>
-                <p style={{ fontWeight: '500' }}>${entry.portfolioAction.price.toFixed(2)}</p>
-              </div>
             </div>
           </div>
         </Card>
       )}
 
-      {/* Context indicators */}
-      {entry.meta && (
+      {/* Related Position */}
+      {position && (
         <Card>
-          <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' }}>
-            Context Captured
-          </h2>
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {Boolean(entry.meta.noThesisExplicit) && (
-              <span style={{
-                padding: '0.25rem 0.5rem',
-                backgroundColor: '#f3f4f6',
-                color: '#6b7280',
-                borderRadius: '0.25rem',
-                fontSize: '0.75rem',
-              }}>
-                No related thesis (explicit)
-              </span>
-            )}
-            {Array.isArray(entry.meta.contextAnchors) && (entry.meta.contextAnchors as unknown[]).length > 0 && (
-              <span style={{
-                padding: '0.25rem 0.5rem',
-                backgroundColor: '#dbeafe',
-                color: '#1e40af',
-                borderRadius: '0.25rem',
-                fontSize: '0.75rem',
-              }}>
-                {(entry.meta.contextAnchors as unknown[]).length} context anchor(s)
-              </span>
-            )}
-          </div>
-        </Card>
-      )}
-
-      {/* Portfolio Action Form - only for decision entries without existing action */}
-      {entry.type === 'decision' && !entry.portfolioAction && !entry.archivedAt && (
-        <Card>
-          <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.75rem' }}>
-            Add Portfolio Action
-          </h2>
-          {!showActionForm ? (
-            <button
-              onClick={() => setShowActionForm(true)}
-              style={{
-                padding: '0.5rem 1rem',
-                backgroundColor: '#10b981',
-                color: 'white',
-                border: 'none',
-                borderRadius: '0.25rem',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-              }}
-            >
-              Add Action
-            </button>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {/* Action Type */}
-              <div>
-                <label style={{ display: 'block', fontSize: '0.875rem', color: '#374151', marginBottom: '0.25rem' }}>
-                  Action Type
-                </label>
-                <select
-                  value={actionType}
-                  onChange={(e) => {
-                    setActionType(e.target.value as ActionType)
-                    setSelectedPositionId('')
-                    setTicker('')
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '0.25rem',
-                    fontSize: '0.875rem',
-                  }}
-                >
-                  <option value="set_position">Open New Position</option>
-                  <option value="buy">Increase Position (Buy)</option>
-                  <option value="sell">Decrease Position (Sell)</option>
-                  <option value="close_position">Close Position</option>
-                </select>
-              </div>
-
-              {/* Ticker (for new position) */}
-              {needsNewPosition && (
+          <h3 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '0.75rem', color: '#374151' }}>
+            Related Position
+          </h3>
+          <Link
+            to={`/positions/${position.id}`}
+            style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+          >
+            <div style={{
+              padding: '0.75rem',
+              backgroundColor: '#f0fdf4',
+              borderRadius: '0.375rem',
+              borderLeft: '3px solid #10b981',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.875rem', color: '#374151', marginBottom: '0.25rem' }}>
-                    Ticker
-                  </label>
-                  <input
-                    type="text"
-                    value={ticker}
-                    onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                    placeholder="e.g. AAPL"
-                    style={{
-                      width: '100%',
-                      padding: '0.5rem',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '0.25rem',
-                      fontSize: '0.875rem',
-                    }}
-                  />
+                  <div style={{ fontWeight: '600', color: '#166534' }}>{position.ticker}</div>
+                  <div style={{ fontSize: '0.875rem', color: '#15803d' }}>
+                    {position.quantity} shares @ ${position.avgCost.toFixed(2)}
+                  </div>
                 </div>
-              )}
-
-              {/* Position selector (for existing position) */}
-              {needsExistingPosition && (
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.875rem', color: '#374151', marginBottom: '0.25rem' }}>
-                    Select Position
-                  </label>
-                  {positions.length === 0 ? (
-                    <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
-                      No active positions available. Open a new position first.
-                    </p>
-                  ) : (
-                    <select
-                      value={selectedPositionId}
-                      onChange={(e) => setSelectedPositionId(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '0.5rem',
-                        border: '1px solid #d1d5db',
-                        borderRadius: '0.25rem',
-                        fontSize: '0.875rem',
-                      }}
-                    >
-                      <option value="">Select a position...</option>
-                      {positions.map((pos) => (
-                        <option key={pos.id} value={pos.id}>
-                          {pos.ticker} ({pos.quantity} shares @ ${pos.avgCost.toFixed(2)})
-                        </option>
-                      ))}
-                    </select>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontWeight: '500', color: '#166534' }}>
+                    ${(position.quantity * position.avgCost).toFixed(2)}
+                  </div>
+                  {position.closedAt && (
+                    <span style={{
+                      fontSize: '0.75rem',
+                      padding: '0.125rem 0.375rem',
+                      backgroundColor: '#fee2e2',
+                      color: '#991b1b',
+                      borderRadius: '0.125rem',
+                    }}>
+                      Closed
+                    </span>
                   )}
                 </div>
-              )}
-
-              {/* Quantity */}
-              {actionType !== 'close_position' && (
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.875rem', color: '#374151', marginBottom: '0.25rem' }}>
-                    Quantity
-                    {actionType === 'sell' && selectedPositionId && (
-                      <span style={{ color: '#6b7280' }}> (max: {getMaxSellQuantity()})</span>
-                    )}
-                  </label>
-                  <input
-                    type="number"
-                    value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
-                    min="0"
-                    step="any"
-                    placeholder="Number of shares"
-                    style={{
-                      width: '100%',
-                      padding: '0.5rem',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '0.25rem',
-                      fontSize: '0.875rem',
-                    }}
-                  />
-                </div>
-              )}
-
-              {/* Price */}
-              <div>
-                <label style={{ display: 'block', fontSize: '0.875rem', color: '#374151', marginBottom: '0.25rem' }}>
-                  Price per Share
-                </label>
-                <input
-                  type="number"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  min="0"
-                  step="0.01"
-                  placeholder="Price in USD"
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '0.25rem',
-                    fontSize: '0.875rem',
-                  }}
-                />
-              </div>
-
-              {/* Error message */}
-              {actionError && (
-                <p style={{ color: '#dc2626', fontSize: '0.875rem', margin: 0 }}>
-                  {actionError}
-                </p>
-              )}
-
-              {/* Buttons */}
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button
-                  onClick={handleExecuteAction}
-                  disabled={!isActionFormValid()}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    backgroundColor: isActionFormValid() ? '#10b981' : '#9ca3af',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '0.25rem',
-                    cursor: isActionFormValid() ? 'pointer' : 'not-allowed',
-                    fontSize: '0.875rem',
-                  }}
-                >
-                  Execute Action
-                </button>
-                <button
-                  onClick={resetActionForm}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    backgroundColor: '#e5e7eb',
-                    color: '#374151',
-                    border: 'none',
-                    borderRadius: '0.25rem',
-                    cursor: 'pointer',
-                    fontSize: '0.875rem',
-                  }}
-                >
-                  Cancel
-                </button>
               </div>
             </div>
-          )}
+          </Link>
+        </Card>
+      )}
+
+      {/* Optional Fields / Meta */}
+      {entry.meta && Object.keys(entry.meta).length > 0 && (
+        <Card>
+          <h3 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '0.75rem', color: '#374151' }}>
+            Additional Details
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {typeof entry.meta.rationale === 'string' && (
+              <div>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Rationale</div>
+                <div style={{ fontSize: '0.875rem', color: '#374151', whiteSpace: 'pre-wrap' }}>
+                  {entry.meta.rationale}
+                </div>
+              </div>
+            )}
+            {typeof entry.meta.fees === 'number' && (
+              <div>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Fees</div>
+                <div style={{ fontSize: '0.875rem', color: '#374151' }}>
+                  ${entry.meta.fees.toFixed(2)}
+                </div>
+              </div>
+            )}
+            {typeof entry.meta.venue === 'string' && (
+              <div>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Venue / Exchange</div>
+                <div style={{ fontSize: '0.875rem', color: '#374151' }}>
+                  {entry.meta.venue}
+                </div>
+              </div>
+            )}
+            {typeof entry.meta.sector === 'string' && (
+              <div>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Sector</div>
+                <div style={{ fontSize: '0.875rem', color: '#374151' }}>
+                  {entry.meta.sector}
+                </div>
+              </div>
+            )}
+            {typeof entry.meta.assetClass === 'string' && (
+              <div>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Asset Class</div>
+                <div style={{ fontSize: '0.875rem', color: '#374151' }}>
+                  {entry.meta.assetClass}
+                </div>
+              </div>
+            )}
+            {typeof entry.meta.timeHorizon === 'string' && (
+              <div>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Time Horizon</div>
+                <div style={{ fontSize: '0.875rem', color: '#374151' }}>
+                  {entry.meta.timeHorizon}
+                </div>
+              </div>
+            )}
+            {typeof entry.meta.priceTargets === 'string' && (
+              <div>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Price Targets</div>
+                <div style={{ fontSize: '0.875rem', color: '#374151' }}>
+                  {entry.meta.priceTargets}
+                </div>
+              </div>
+            )}
+            {typeof entry.meta.invalidation === 'string' && (
+              <div>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Invalidation Conditions</div>
+                <div style={{ fontSize: '0.875rem', color: '#374151', whiteSpace: 'pre-wrap' }}>
+                  {entry.meta.invalidation}
+                </div>
+              </div>
+            )}
+            {typeof entry.meta.emotions === 'string' && (
+              <div>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Emotions</div>
+                <div style={{ fontSize: '0.875rem', color: '#374151' }}>
+                  {entry.meta.emotions}
+                </div>
+              </div>
+            )}
+            {(typeof entry.meta.confidence === 'string' || typeof entry.meta.confidence === 'number') && (
+              <div>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Confidence / Conviction</div>
+                <div style={{ fontSize: '0.875rem', color: '#374151' }}>
+                  {String(entry.meta.confidence)}
+                </div>
+              </div>
+            )}
+            {typeof entry.meta.status === 'string' && (
+              <div>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Status</div>
+                <div style={{ fontSize: '0.875rem', color: '#374151' }}>
+                  {entry.meta.status}
+                </div>
+              </div>
+            )}
+            {typeof entry.meta.reminders === 'string' && (
+              <div>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Reminders / Notes</div>
+                <div style={{ fontSize: '0.875rem', color: '#374151', whiteSpace: 'pre-wrap' }}>
+                  {entry.meta.reminders}
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/* Linked Journal Entries */}
+      {entry.meta && Array.isArray(entry.meta.relatedEntryIds) && entry.meta.relatedEntryIds.length > 0 && (
+        <Card>
+          <h3 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '0.75rem', color: '#374151' }}>
+            Linked Journal Entries
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {(entry.meta.relatedEntryIds as string[]).map(relatedId => {
+              const relatedEntry = JournalService.get(relatedId)
+              if (!relatedEntry) return null
+              const relatedValue = relatedEntry.quantity * relatedEntry.price
+              return (
+                <Link
+                  key={relatedId}
+                  to={`/journal/${relatedId}`}
+                  style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+                >
+                  <div style={{
+                    padding: '0.5rem 0.75rem',
+                    backgroundColor: '#eff6ff',
+                    borderRadius: '0.25rem',
+                    borderLeft: '3px solid #3b82f6',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <span style={{
+                          fontSize: '0.625rem',
+                          padding: '0.125rem 0.25rem',
+                          backgroundColor: '#3b82f6',
+                          color: 'white',
+                          borderRadius: '0.125rem',
+                          marginRight: '0.375rem',
+                          textTransform: 'uppercase',
+                        }}>
+                          {relatedEntry.actionType}
+                        </span>
+                        <span style={{ fontWeight: '500', color: '#1e40af' }}>{relatedEntry.ticker}</span>
+                      </div>
+                      <span style={{ fontSize: '0.875rem', color: '#1e40af' }}>
+                        ${relatedValue.toFixed(2)}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>
+                      {relatedEntry.quantity} @ ${relatedEntry.price.toFixed(2)} • {new Date(relatedEntry.entryTime || relatedEntry.createdAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
         </Card>
       )}
 
       {/* Linked Items from RelationEdges */}
       {id && <LinkedItems entityRef={{ type: 'journal', id }} />}
 
-      {/* Actions section - archive */}
+      {/* Timestamps */}
+      <Card>
+        <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+          <div>Created: {new Date(entry.createdAt).toLocaleString()}</div>
+          {entry.updatedAt !== entry.createdAt && (
+            <div>Updated: {new Date(entry.updatedAt).toLocaleString()}</div>
+          )}
+        </div>
+      </Card>
+
+      {/* Actions */}
       {!entry.archivedAt && (
         <Card>
-          <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.75rem' }}>
+          <h3 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '0.75rem', color: '#374151' }}>
             Actions
-          </h2>
+          </h3>
           <button
             onClick={handleArchive}
             style={{
@@ -480,7 +429,7 @@ export default function JournalDetail() {
         </Card>
       )}
 
-      {/* Archived warning */}
+      {/* Archived Warning */}
       {entry.archivedAt && (
         <Card>
           <div style={{

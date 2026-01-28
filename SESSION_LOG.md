@@ -24,9 +24,10 @@ Completed parts:
 - Part C: Portfolio Core Flow ✅
 - Part D: Settings Completion ✅
 - Part E: UX Friction Pass ✅
+- TASKLIST Part 1: Trading Journal ✅
 
 Next task:
-- Awaiting user instruction
+- TASKLIST Part 2 (Portfolio) or Part 3 (Dashboard)
 
 ----------------------------------------------------------------
 ----------------------------------------------------------------
@@ -1575,3 +1576,131 @@ Status:
 
 Next step:
 - Awaiting user instruction
+
+---
+
+## 2026-01-28 — Session 23 (TASKLIST Part 1: Trading Journal)
+Goal:
+- Implement Trading Journal locked definition per TASKLIST.md Part 1
+
+Key Decision (recorded in DECISIONS.md):
+- Trading Journal contains only executed actions (type: 'decision')
+- Reflections and ideas belong in Thoughts & Theses, not Journal
+- All journal entries require mandatory trading fields
+
+Work completed:
+
+JournalEntry schema redesigned (entities.ts):
+- type: 'decision' only (no reflection/note types in Journal)
+- New mandatory fields: actionType, ticker, quantity, price, entryTime, positionMode
+- actionType enum: 'buy', 'sell', 'long', 'short', 'deposit', 'withdraw'
+- positionMode: 'new' | 'existing'
+- PaymentInfo for buy actions: asset, amount, isNewMoney
+- Optional fields go in meta (rationale, fees, venue, etc.)
+- Removed title, content fields (trading fields are now canonical)
+
+JournalRepository updated:
+- Validation for all mandatory fields
+- Rejects entries with invalid actionType, missing ticker/qty/price
+- Validates positionMode + positionId relationship
+- Payment required for buy actions
+- Uppercases ticker on create/update
+
+JournalService.create() redesigned:
+- Now takes JournalCreateInput with trading fields
+- Returns JournalCreateResult { journalEntry, position, eventId, cashDeducted? }
+- Automatically creates/updates Position on entry save
+- Handles buy: new position or increase existing
+- Handles sell: decrease position, auto-close at qty=0
+- Handles deposit/withdraw: affects cash position
+- Handles long/short: creates leveraged positions
+- Deducts from cash for buy actions (unless isNewMoney)
+- Creates RelationEdge and emits Event
+
+Journal.tsx (form completely rewritten):
+- Trading-first form with action type selector
+- Position mode: New vs Existing selection
+- Ticker input for new positions
+- Position dropdown for existing positions
+- Quantity and Price inputs with derived Value display
+- Entry time (editable, defaults to now)
+- Payment section for buy actions (with "new money" checkbox)
+- Optional fields section (collapsible): rationale, fees, venue
+- Submit validation enforces mandatory fields
+- Trade history list with action type badges
+
+JournalDetail.tsx (display completely rewritten):
+- Shows ticker, action type badge, value
+- Transaction details grid: quantity, price, entry time, position mode
+- Payment details card (for buys)
+- Related position link
+- Additional details from meta (rationale, fees, venue, etc.)
+- Archive action preserved
+
+LinkedItems.tsx updated:
+- Preview uses actionType + ticker instead of removed title field
+
+Tests rewritten:
+- JournalRepository.test.ts: 27 tests for new schema
+- JournalService.test.ts: 32 tests for new create() API
+- PortfolioService.test.ts: 4 linkage tests updated
+
+Files modified: 9
+- src/domain/types/entities.ts (JournalEntry, ActionType, PositionMode, PaymentInfo)
+- src/domain/repositories/JournalRepository.ts (new validation)
+- src/domain/services/JournalService.ts (new create() API)
+- src/domain/services/index.ts (new type exports)
+- src/ui/pages/Journal.tsx (complete rewrite)
+- src/ui/pages/JournalDetail.tsx (complete rewrite)
+- src/ui/components/LinkedItems.tsx (preview fix)
+- tests/unit/repositories/JournalRepository.test.ts (complete rewrite)
+- tests/unit/services/JournalService.test.ts (complete rewrite)
+- tests/unit/services/PortfolioService.test.ts (linkage tests updated)
+
+Verification results:
+- npm run lint: PASS (0 errors, 0 warnings)
+- npm run typecheck: PASS (0 TypeScript errors)
+- npm run test: PASS (259 tests passed)
+- npm run build: PASS (247.47 kB bundle)
+- npm run verify: PASS (all checks passed)
+
+Acceptance criteria met (per TASKLIST 1.1):
+- Entry type: decision only ✓
+- Action type: buy, sell, long, short, deposit, withdraw ✓
+- Ticker/symbol mandatory ✓
+- Quantity, Price, Value (derived) ✓
+- Entry time editable, defaults to now ✓
+- Position relationship: new vs existing ✓
+- Payment required for buys ✓
+- "New money" option ✓
+- Cannot save without mandatory fields ✓
+
+Status:
+- TASKLIST Part 1 (Trading Journal) complete and verified
+- All mandatory fields enforced
+- Optional fields recordable via meta
+- Out-of-scope items NOT present
+
+Next step:
+- Awaiting user instruction for Part 2 (Portfolio) or Part 3 (Dashboard)
+
+---
+
+## 2026-01-28 — Session 24 (Part 1 Completion Confirmed)
+Goal:
+- Finalize and confirm TASKLIST Part 1 (Trading Journal) as complete
+
+Key decisions:
+- Trading Journal contains executed trades only (type: 'decision')
+- Reflections and ideas live in Thoughts & Theses, not Journal
+- Deterministic auto-linking: existing position mode auto-suggests most recent entry with same ticker
+- All optional fields stored in meta (sector, assetClass, rationale, timeHorizon, priceTargets, invalidation, emotions, confidence, fees, venue, status, reminders, relatedEntryIds)
+
+Status:
+- TASKLIST Part 1 marked DONE
+- All mandatory fields enforced
+- All optional fields implemented
+- Related entries linking functional
+
+Next step:
+- Part 2 (Portfolio) or Part 3 (Dashboard)

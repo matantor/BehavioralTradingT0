@@ -1,9 +1,12 @@
 // JournalRepository: CRUD operations for JournalEntry entities
-// Per Task 1: list() returns entries sorted by createdAt desc
+// Per TASKLIST Part 1: Journal contains only executed actions with mandatory trading fields
 
-import type { JournalEntry } from '@/domain/types/entities'
+import type { JournalEntry, ActionType, PositionMode } from '@/domain/types/entities'
 import { generateUUID, generateTimestamp } from '@/domain/types/entities'
 import { loadData, saveData } from '@/lib/storage/storage'
+
+const VALID_ACTION_TYPES: ActionType[] = ['buy', 'sell', 'long', 'short', 'deposit', 'withdraw']
+const VALID_POSITION_MODES: PositionMode[] = ['new', 'existing']
 
 class JournalRepositoryClass {
   list(includeArchived = false): JournalEntry[] {
@@ -14,9 +17,11 @@ class JournalRepositoryClass {
       entries = entries.filter((e) => !e.archivedAt)
     }
 
-    // Sort by createdAt descending (newest first)
+    // Sort by entryTime descending (newest first), fallback to createdAt for legacy entries
     return entries.sort((a, b) => {
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      const timeA = a.entryTime || a.createdAt
+      const timeB = b.entryTime || b.createdAt
+      return new Date(timeB).getTime() - new Date(timeA).getTime()
     })
   }
 
@@ -28,15 +33,42 @@ class JournalRepositoryClass {
   create(
     input: Omit<JournalEntry, 'id' | 'createdAt' | 'updatedAt'>
   ): JournalEntry {
-    // Validate required fields
-    if (!input.title) {
-      throw new Error('JournalEntry title is required')
+    // Validate mandatory fields per TASKLIST Part 1
+    if (input.type !== 'decision') {
+      throw new Error('JournalEntry type must be decision (reflections belong in Thoughts)')
     }
-    if (!input.content) {
-      throw new Error('JournalEntry content is required')
+    if (!input.actionType || !VALID_ACTION_TYPES.includes(input.actionType)) {
+      throw new Error(`JournalEntry actionType must be one of: ${VALID_ACTION_TYPES.join(', ')}`)
     }
-    if (!['decision', 'reflection', 'note'].includes(input.type)) {
-      throw new Error('JournalEntry type must be decision, reflection, or note')
+    if (!input.ticker || typeof input.ticker !== 'string' || !input.ticker.trim()) {
+      throw new Error('JournalEntry ticker is required')
+    }
+    if (typeof input.quantity !== 'number' || input.quantity <= 0) {
+      throw new Error('JournalEntry quantity must be a positive number')
+    }
+    if (typeof input.price !== 'number' || input.price < 0) {
+      throw new Error('JournalEntry price must be a non-negative number')
+    }
+    if (!input.entryTime) {
+      throw new Error('JournalEntry entryTime is required')
+    }
+    if (!input.positionMode || !VALID_POSITION_MODES.includes(input.positionMode)) {
+      throw new Error(`JournalEntry positionMode must be one of: ${VALID_POSITION_MODES.join(', ')}`)
+    }
+    if (input.positionMode === 'existing' && !input.positionId) {
+      throw new Error('JournalEntry positionId is required when positionMode is existing')
+    }
+    // Payment required for buy actions
+    if (input.actionType === 'buy' && !input.payment) {
+      throw new Error('JournalEntry payment is required for buy actions')
+    }
+    if (input.payment) {
+      if (!input.payment.asset || typeof input.payment.asset !== 'string') {
+        throw new Error('JournalEntry payment.asset is required')
+      }
+      if (typeof input.payment.amount !== 'number' || input.payment.amount < 0) {
+        throw new Error('JournalEntry payment.amount must be a non-negative number')
+      }
     }
 
     const now = generateTimestamp()
@@ -45,6 +77,7 @@ class JournalRepositoryClass {
       createdAt: now,
       updatedAt: now,
       ...input,
+      ticker: input.ticker.trim().toUpperCase(),
     }
 
     const data = loadData()
@@ -61,9 +94,15 @@ class JournalRepositoryClass {
       throw new Error(`JournalEntry ${id} not found`)
     }
 
-    // Validate type if provided
-    if (patch.type && !['decision', 'reflection', 'note'].includes(patch.type)) {
-      throw new Error('JournalEntry type must be decision, reflection, or note')
+    // Validate fields if provided
+    if (patch.type && patch.type !== 'decision') {
+      throw new Error('JournalEntry type must be decision')
+    }
+    if (patch.actionType && !VALID_ACTION_TYPES.includes(patch.actionType)) {
+      throw new Error(`JournalEntry actionType must be one of: ${VALID_ACTION_TYPES.join(', ')}`)
+    }
+    if (patch.positionMode && !VALID_POSITION_MODES.includes(patch.positionMode)) {
+      throw new Error(`JournalEntry positionMode must be one of: ${VALID_POSITION_MODES.join(', ')}`)
     }
 
     const updated: JournalEntry = {
@@ -72,6 +111,7 @@ class JournalRepositoryClass {
       id: existing.id, // Prevent ID change
       createdAt: existing.createdAt, // Prevent createdAt change
       updatedAt: generateTimestamp(),
+      ticker: patch.ticker ? patch.ticker.trim().toUpperCase() : existing.ticker,
     }
 
     data.journalEntries[id] = updated

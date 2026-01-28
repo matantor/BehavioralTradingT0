@@ -1,7 +1,8 @@
 // JournalService: domain service for JournalEntry operations
+// Per TASKLIST Part 1: Journal contains only executed actions with mandatory trading fields
 // Services call repositories only, no direct storage access
 
-import type { JournalEntry, PortfolioAction, Position, EntityRef } from '@/domain/types/entities'
+import type { JournalEntry, PortfolioAction, Position, EntityRef, ActionType, PaymentInfo } from '@/domain/types/entities'
 import { generateTimestamp } from '@/domain/types/entities'
 import { JournalRepository } from '@/domain/repositories/JournalRepository'
 import { PositionRepository } from '@/domain/repositories/PositionRepository'
@@ -9,22 +10,45 @@ import { RelationRepository } from '@/domain/repositories/RelationRepository'
 import { EventRepository } from '@/domain/repositories/EventRepository'
 
 interface JournalFilter {
-  type?: JournalEntry['type']
+  actionType?: ActionType
 }
 
-// Result of executing a portfolio action
+// Input for creating a journal entry
+export interface JournalCreateInput {
+  actionType: ActionType
+  ticker: string
+  quantity: number
+  price: number
+  entryTime: string
+  positionMode: 'new' | 'existing'
+  positionId?: string
+  payment?: PaymentInfo
+  meta?: Record<string, unknown>
+}
+
+// Result of creating a journal entry
+export interface JournalCreateResult {
+  journalEntry: JournalEntry
+  position: Position
+  eventId: string
+  cashDeducted?: number
+}
+
+// Legacy result type for backward compatibility
 export interface PortfolioActionResult {
   journalEntry: JournalEntry
   position: Position
   eventId: string
 }
 
+const CASH_TICKER = 'USD'
+
 class JournalServiceClass {
   list(filter?: JournalFilter): JournalEntry[] {
     const entries = JournalRepository.list(false) // excludes archived by default
 
-    if (filter?.type) {
-      return entries.filter((entry) => entry.type === filter.type)
+    if (filter?.actionType) {
+      return entries.filter((entry) => entry.actionType === filter.actionType)
     }
 
     return entries
@@ -34,10 +58,191 @@ class JournalServiceClass {
     return JournalRepository.getById(id)
   }
 
-  create(
-    payload: Omit<JournalEntry, 'id' | 'createdAt' | 'updatedAt'>
-  ): JournalEntry {
-    return JournalRepository.create(payload)
+  /**
+   * Create a journal entry and execute the associated portfolio action.
+   * Per TASKLIST Part 1: journal entry creation triggers position changes.
+   *
+   * For buys: creates/increases position, deducts from cash (unless isNewMoney)
+   * For sells: decreases position, closes if quantity reaches 0
+   * For deposits/withdraws: affects cash position
+   * For long/short: creates/modifies leveraged position (exact math deferred)
+   */
+  create(input: JournalCreateInput): JournalCreateResult {
+    const { actionType, ticker, quantity, price, entryTime, positionMode, positionId, payment, meta } = input
+
+    let position: Position
+    let cashDeducted: number | undefined
+
+    // Handle position changes based on action type
+    switch (actionType) {
+      case 'buy': {
+        if (positionMode === 'new') {
+          // Create new position
+          position = PositionRepository.create({
+            ticker: ticker.toUpperCase(),
+            quantity,
+            avgCost: price,
+            currency: 'USD',
+            openedAt: entryTime,
+          })
+        } else {
+          // Increase existing position
+          if (!positionId) {
+            throw new Error('Position ID required for existing position')
+          }
+          const existing = PositionRepository.getById(positionId)
+          if (!existing) {
+            throw new Error(`Position ${positionId} not found`)
+          }
+          if (existing.closedAt) {
+            throw new Error('Cannot buy into closed position')
+          }
+
+          // Calculate new average cost
+          const totalCost = existing.quantity * existing.avgCost + quantity * price
+          const newQuantity = existing.quantity + quantity
+          const newAvgCost = totalCost / newQuantity
+
+          position = PositionRepository.update(positionId, {
+            quantity: newQuantity,
+            avgCost: newAvgCost,
+          })
+        }
+
+        // Handle cash deduction for buys
+        if (payment && !payment.isNewMoney && payment.asset === 'USD') {
+          cashDeducted = this.deductFromCash(payment.amount)
+        }
+        break
+      }
+
+      case 'sell': {
+        if (positionMode === 'new') {
+          throw new Error('Cannot sell a new position; must select existing position')
+        }
+        if (!positionId) {
+          throw new Error('Position ID required for sell action')
+        }
+        const existing = PositionRepository.getById(positionId)
+        if (!existing) {
+          throw new Error(`Position ${positionId} not found`)
+        }
+        if (existing.closedAt) {
+          throw new Error('Cannot sell from closed position')
+        }
+        if (quantity > existing.quantity) {
+          throw new Error(`Cannot sell ${quantity}; only ${existing.quantity} held`)
+        }
+
+        const newQuantity = existing.quantity - quantity
+        position = PositionRepository.update(positionId, {
+          quantity: newQuantity,
+          closedAt: newQuantity === 0 ? entryTime : undefined,
+        })
+        break
+      }
+
+      case 'deposit': {
+        // Deposit increases cash position
+        position = this.getOrCreateCashPosition()
+        position = PositionRepository.update(position.id, {
+          quantity: position.quantity + quantity,
+        })
+        break
+      }
+
+      case 'withdraw': {
+        // Withdraw decreases cash position
+        position = this.getOrCreateCashPosition()
+        if (quantity > position.quantity) {
+          throw new Error(`Cannot withdraw ${quantity}; only ${position.quantity} available`)
+        }
+        position = PositionRepository.update(position.id, {
+          quantity: position.quantity - quantity,
+        })
+        break
+      }
+
+      case 'long':
+      case 'short': {
+        // Long/short positions: create or update
+        // Per TASKLIST: exact leverage math is deferred
+        if (positionMode === 'new') {
+          position = PositionRepository.create({
+            ticker: ticker.toUpperCase(),
+            quantity,
+            avgCost: price,
+            currency: 'USD',
+            openedAt: entryTime,
+            // Mark as leveraged in meta
+          })
+          PositionRepository.update(position.id, {
+            meta: { leveraged: true, direction: actionType },
+          })
+          position = PositionRepository.getById(position.id)!
+        } else {
+          if (!positionId) {
+            throw new Error('Position ID required for existing position')
+          }
+          const existing = PositionRepository.getById(positionId)
+          if (!existing) {
+            throw new Error(`Position ${positionId} not found`)
+          }
+          position = PositionRepository.update(positionId, {
+            quantity: existing.quantity + quantity,
+          })
+        }
+        break
+      }
+
+      default:
+        throw new Error(`Unknown action type: ${actionType}`)
+    }
+
+    // Create the journal entry
+    const journalEntry = JournalRepository.create({
+      type: 'decision',
+      actionType,
+      ticker: ticker.toUpperCase(),
+      quantity,
+      price,
+      entryTime,
+      positionMode,
+      positionId: position.id,
+      payment,
+      meta,
+    })
+
+    // Create relation: journal → position
+    const journalRef: EntityRef = { type: 'journal', id: journalEntry.id }
+    const positionRef: EntityRef = { type: 'position', id: position.id }
+
+    RelationRepository.create(journalRef, positionRef, 'related', {
+      derivedFrom: 'journalEntry',
+      actionType,
+    })
+
+    // Emit trade event
+    const event = EventRepository.create(
+      `trade.${actionType}`,
+      [journalRef, positionRef],
+      {
+        ticker: position.ticker,
+        quantity,
+        price,
+        actionType,
+        value: quantity * price,
+        payment,
+      },
+      entryTime
+    )
+
+    return {
+      journalEntry,
+      position,
+      eventId: event.id,
+      cashDeducted,
+    }
   }
 
   update(id: string, patch: Partial<JournalEntry>): JournalEntry {
@@ -49,15 +254,46 @@ class JournalServiceClass {
   }
 
   /**
-   * Execute a portfolio action from a journal entry.
-   * Per TASKLIST Part B: manual-first portfolio actions embedded in journal entries.
-   *
-   * Validates action, creates/updates Position, saves portfolioAction to entry,
-   * creates RelationEdge linking journal→position, and emits trade Event.
-   *
-   * @param journalId - ID of the journal entry to attach the action to
-   * @param action - The portfolio action to execute
-   * @returns Result containing updated entry, position, and event ID
+   * Get or create the USD cash position
+   */
+  private getOrCreateCashPosition(): Position {
+    const positions = PositionRepository.list(false)
+    let cashPosition = positions.find(p => p.ticker === CASH_TICKER && p.assetType === 'cash')
+
+    if (!cashPosition) {
+      cashPosition = PositionRepository.create({
+        ticker: CASH_TICKER,
+        quantity: 0,
+        avgCost: 1,
+        currency: 'USD',
+        assetType: 'cash',
+        openedAt: generateTimestamp(),
+      })
+    }
+
+    return cashPosition
+  }
+
+  /**
+   * Deduct amount from cash position
+   * Returns amount actually deducted
+   */
+  private deductFromCash(amount: number): number {
+    const cashPosition = this.getOrCreateCashPosition()
+    const deductAmount = Math.min(amount, cashPosition.quantity)
+
+    if (deductAmount > 0) {
+      PositionRepository.update(cashPosition.id, {
+        quantity: cashPosition.quantity - deductAmount,
+      })
+    }
+
+    return deductAmount
+  }
+
+  /**
+   * Legacy method: Execute a portfolio action from a journal entry.
+   * @deprecated Use create() instead for new entries
    */
   executePortfolioAction(journalId: string, action: PortfolioAction): PortfolioActionResult {
     // Get and validate journal entry
@@ -67,12 +303,6 @@ class JournalServiceClass {
     }
     if (entry.archivedAt) {
       throw new Error('Cannot add portfolio action to archived journal entry')
-    }
-    if (entry.type !== 'decision') {
-      throw new Error('Portfolio actions can only be added to decision entries')
-    }
-    if (entry.portfolioAction) {
-      throw new Error('Journal entry already has a portfolio action')
     }
 
     // Validate action fields
@@ -89,7 +319,6 @@ class JournalServiceClass {
 
     switch (action.actionType) {
       case 'set_position': {
-        // Open new position
         if (!action.ticker) {
           throw new Error('Ticker is required for opening a position')
         }
@@ -104,7 +333,6 @@ class JournalServiceClass {
       }
 
       case 'buy': {
-        // Increase existing position
         if (!action.positionId) {
           throw new Error('Position ID is required for buy action')
         }
@@ -112,14 +340,10 @@ class JournalServiceClass {
         if (!existing) {
           throw new Error(`Position ${action.positionId} not found`)
         }
-        if (existing.archivedAt) {
-          throw new Error('Cannot buy into archived position')
-        }
         if (existing.closedAt) {
           throw new Error('Cannot buy into closed position')
         }
 
-        // Calculate new average cost: (old_qty * old_cost + new_qty * new_price) / (old_qty + new_qty)
         const totalCost = existing.quantity * existing.avgCost + action.quantity * action.price
         const newQuantity = existing.quantity + action.quantity
         const newAvgCost = totalCost / newQuantity
@@ -132,7 +356,6 @@ class JournalServiceClass {
       }
 
       case 'sell': {
-        // Decrease existing position
         if (!action.positionId) {
           throw new Error('Position ID is required for sell action')
         }
@@ -140,36 +363,28 @@ class JournalServiceClass {
         if (!existing) {
           throw new Error(`Position ${action.positionId} not found`)
         }
-        if (existing.archivedAt) {
-          throw new Error('Cannot sell from archived position')
-        }
         if (existing.closedAt) {
           throw new Error('Cannot sell from closed position')
         }
         if (action.quantity > existing.quantity) {
-          throw new Error(`Cannot sell ${action.quantity} shares; only ${existing.quantity} held`)
+          throw new Error(`Cannot sell ${action.quantity}; only ${existing.quantity} held`)
         }
 
         const newQuantity = existing.quantity - action.quantity
         position = PositionRepository.update(action.positionId, {
           quantity: newQuantity,
-          // Close position if quantity reaches 0
           closedAt: newQuantity === 0 ? executedAt : undefined,
         })
         break
       }
 
       case 'close_position': {
-        // Close entire position
         if (!action.positionId) {
           throw new Error('Position ID is required for close_position action')
         }
         const existing = PositionRepository.getById(action.positionId)
         if (!existing) {
           throw new Error(`Position ${action.positionId} not found`)
-        }
-        if (existing.archivedAt) {
-          throw new Error('Cannot close archived position')
         }
         if (existing.closedAt) {
           throw new Error('Position is already closed')
@@ -186,21 +401,10 @@ class JournalServiceClass {
         throw new Error(`Unknown action type: ${action.actionType}`)
     }
 
-    // Save portfolio action to journal entry (with position ID for traceability)
-    const savedAction: PortfolioAction = {
-      ...action,
-      positionId: position.id,
-      executedAt,
-    }
-    const updatedEntry = JournalRepository.update(journalId, {
-      portfolioAction: savedAction,
-    })
-
     // Create relation: journal → position
     const journalRef: EntityRef = { type: 'journal', id: journalId }
     const positionRef: EntityRef = { type: 'position', id: position.id }
 
-    // Check if relation already exists (idempotency)
     const existingRelation = RelationRepository.findExisting(journalRef, positionRef, 'related')
     if (!existingRelation) {
       RelationRepository.create(journalRef, positionRef, 'related', {
@@ -224,7 +428,7 @@ class JournalServiceClass {
     )
 
     return {
-      journalEntry: updatedEntry,
+      journalEntry: entry,
       position,
       eventId: event.id,
     }

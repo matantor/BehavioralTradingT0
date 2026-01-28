@@ -62,6 +62,36 @@ describe('PortfolioService', () => {
     })
   })
 
+  describe('listOpen', () => {
+    it('returns positions with quantity > 0', () => {
+      const open = PortfolioService.create({ ticker: 'AAPL', quantity: 10, avgCost: 150 })
+      PortfolioService.create({ ticker: 'MSFT', quantity: 0, avgCost: 100 }) // closed position
+
+      const openPositions = PortfolioService.listOpen()
+      expect(openPositions).toHaveLength(1)
+      expect(openPositions[0].id).toBe(open.id)
+    })
+
+    it('excludes archived positions by default', () => {
+      const open = PortfolioService.create({ ticker: 'AAPL', quantity: 10, avgCost: 150 })
+      PortfolioService.archive(open.id)
+
+      const openPositions = PortfolioService.listOpen()
+      expect(openPositions).toHaveLength(0)
+    })
+  })
+
+  describe('listClosed', () => {
+    it('returns positions with quantity === 0', () => {
+      PortfolioService.create({ ticker: 'AAPL', quantity: 10, avgCost: 150 })
+      const closed = PortfolioService.create({ ticker: 'MSFT', quantity: 0, avgCost: 100 })
+
+      const closedPositions = PortfolioService.listClosed()
+      expect(closedPositions).toHaveLength(1)
+      expect(closedPositions[0].id).toBe(closed.id)
+    })
+  })
+
   describe('get', () => {
     it('should return position by id', () => {
       const created = PortfolioService.create({
@@ -250,121 +280,718 @@ describe('PortfolioService', () => {
     })
   })
 
-  describe('Linkage Integrity', () => {
-    it('position update should preserve journal relations', () => {
-      const journal = JournalService.create({
-        type: 'decision',
-        title: 'Buy AAPL',
-        content: 'Adding AAPL to portfolio',
+  describe('setCurrentPrice', () => {
+    it('sets the current price on a position', () => {
+      const pos = PortfolioService.create({ ticker: 'AAPL', quantity: 10, avgCost: 150 })
+
+      const updated = PortfolioService.setCurrentPrice(pos.id, 175)
+
+      expect(updated.currentPrice).toBe(175)
+    })
+
+    it('rejects negative prices', () => {
+      const pos = PortfolioService.create({ ticker: 'AAPL', quantity: 10, avgCost: 150 })
+
+      expect(() => PortfolioService.setCurrentPrice(pos.id, -10)).toThrow('Price cannot be negative')
+    })
+  })
+
+  describe('isLeveraged', () => {
+    it('returns true for positions with meta.leveraged = true', () => {
+      const result = JournalService.create({
+        actionType: 'long',
+        ticker: 'BTC',
+        quantity: 1,
+        price: 50000,
+        entryTime: new Date().toISOString(),
+        positionMode: 'new',
       })
 
-      const position = PortfolioService.create({
+      expect(PortfolioService.isLeveraged(result.position)).toBe(true)
+    })
+
+    it('returns false for spot positions', () => {
+      const result = JournalService.create({
+        actionType: 'buy',
         ticker: 'AAPL',
         quantity: 10,
-        avgCost: 150,
+        price: 150,
+        entryTime: new Date().toISOString(),
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1500 },
       })
 
-      RelationService.create(
-        { type: 'journal', id: journal.id },
-        { type: 'position', id: position.id },
-        'related'
-      )
+      expect(PortfolioService.isLeveraged(result.position)).toBe(false)
+    })
+  })
 
-      const relationsBefore = RelationService.listForEntity({ type: 'journal', id: journal.id })
+  describe('isCash', () => {
+    it('returns true for cash positions', () => {
+      const result = JournalService.create({
+        actionType: 'deposit',
+        ticker: 'USD',
+        quantity: 5000,
+        price: 1,
+        entryTime: new Date().toISOString(),
+        positionMode: 'new',
+      })
+
+      expect(PortfolioService.isCash(result.position)).toBe(true)
+    })
+
+    it('returns false for non-cash positions', () => {
+      const result = JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 150,
+        entryTime: new Date().toISOString(),
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1500 },
+      })
+
+      expect(PortfolioService.isCash(result.position)).toBe(false)
+    })
+  })
+
+  describe('getUnrealizedPnL', () => {
+    it('returns null if no currentPrice set', () => {
+      const result = JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 150,
+        entryTime: new Date().toISOString(),
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1500 },
+      })
+
+      expect(PortfolioService.getUnrealizedPnL(result.position)).toBeNull()
+    })
+
+    it('returns null for leveraged positions', () => {
+      const result = JournalService.create({
+        actionType: 'long',
+        ticker: 'BTC',
+        quantity: 1,
+        price: 50000,
+        entryTime: new Date().toISOString(),
+        positionMode: 'new',
+      })
+
+      PortfolioService.setCurrentPrice(result.position.id, 55000)
+      const pos = PortfolioService.get(result.position.id)!
+
+      expect(PortfolioService.getUnrealizedPnL(pos)).toBeNull()
+    })
+
+    it('returns null for cash positions', () => {
+      const result = JournalService.create({
+        actionType: 'deposit',
+        ticker: 'USD',
+        quantity: 5000,
+        price: 1,
+        entryTime: new Date().toISOString(),
+        positionMode: 'new',
+      })
+
+      expect(PortfolioService.getUnrealizedPnL(result.position)).toBeNull()
+    })
+
+    it('calculates unrealized P&L correctly', () => {
+      const result = JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 150,
+        entryTime: new Date().toISOString(),
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1500 },
+      })
+
+      PortfolioService.setCurrentPrice(result.position.id, 175)
+      const pos = PortfolioService.get(result.position.id)!
+
+      // (175 - 150) * 10 = 250
+      expect(PortfolioService.getUnrealizedPnL(pos)).toBe(250)
+    })
+
+    it('handles negative unrealized P&L', () => {
+      const result = JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 150,
+        entryTime: new Date().toISOString(),
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1500 },
+      })
+
+      PortfolioService.setCurrentPrice(result.position.id, 140)
+      const pos = PortfolioService.get(result.position.id)!
+
+      // (140 - 150) * 10 = -100
+      expect(PortfolioService.getUnrealizedPnL(pos)).toBe(-100)
+    })
+  })
+
+  describe('getRealizedPnL', () => {
+    it('returns 0 for positions with no sells', () => {
+      JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 150,
+        entryTime: new Date().toISOString(),
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1500 },
+      })
+
+      expect(PortfolioService.getRealizedPnL('AAPL')).toBe(0)
+    })
+
+    it('calculates realized P&L from sell at profit', () => {
+      const buy = JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 100,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1000 },
+      })
+
+      JournalService.create({
+        actionType: 'sell',
+        ticker: 'AAPL',
+        quantity: 5,
+        price: 150,
+        entryTime: '2024-02-01T00:00:00Z',
+        positionMode: 'existing',
+        positionId: buy.position.id,
+      })
+
+      // Sold 5 @ $150, cost was $100 each
+      // Realized = (150 - 100) * 5 = 250
+      expect(PortfolioService.getRealizedPnL('AAPL')).toBe(250)
+    })
+
+    it('calculates realized P&L from sell at loss', () => {
+      const buy = JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 150,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1500 },
+      })
+
+      JournalService.create({
+        actionType: 'sell',
+        ticker: 'AAPL',
+        quantity: 5,
+        price: 100,
+        entryTime: '2024-02-01T00:00:00Z',
+        positionMode: 'existing',
+        positionId: buy.position.id,
+      })
+
+      // Sold 5 @ $100, cost was $150 each
+      // Realized = (100 - 150) * 5 = -250
+      expect(PortfolioService.getRealizedPnL('AAPL')).toBe(-250)
+    })
+
+    it('handles multiple buys and sells with avg cost', () => {
+      // Buy 10 @ $100
+      const buy1 = JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 100,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1000 },
+      })
+
+      // Buy 10 more @ $200 (avg cost now = (1000 + 2000) / 20 = 150)
+      JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 200,
+        entryTime: '2024-02-01T00:00:00Z',
+        positionMode: 'existing',
+        positionId: buy1.position.id,
+        payment: { asset: 'USD', amount: 2000 },
+      })
+
+      // Sell 10 @ $175
+      JournalService.create({
+        actionType: 'sell',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 175,
+        entryTime: '2024-03-01T00:00:00Z',
+        positionMode: 'existing',
+        positionId: buy1.position.id,
+      })
+
+      // Realized = (175 - 150) * 10 = 250
+      expect(PortfolioService.getRealizedPnL('AAPL')).toBe(250)
+    })
+
+    it('handles complete position close', () => {
+      const buy = JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 100,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1000 },
+      })
+
+      JournalService.create({
+        actionType: 'sell',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 150,
+        entryTime: '2024-02-01T00:00:00Z',
+        positionMode: 'existing',
+        positionId: buy.position.id,
+      })
+
+      // Sold all 10 @ $150, cost $100 = (150-100)*10 = 500
+      expect(PortfolioService.getRealizedPnL('AAPL')).toBe(500)
+    })
+
+    it('is case-insensitive for ticker', () => {
+      const buy = JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 100,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1000 },
+      })
+
+      JournalService.create({
+        actionType: 'sell',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 150,
+        entryTime: '2024-02-01T00:00:00Z',
+        positionMode: 'existing',
+        positionId: buy.position.id,
+      })
+
+      expect(PortfolioService.getRealizedPnL('aapl')).toBe(500)
+    })
+
+    it('ignores deposit/withdraw entries', () => {
+      // Deposit some cash
+      JournalService.create({
+        actionType: 'deposit',
+        ticker: 'USD',
+        quantity: 5000,
+        price: 1,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+      })
+
+      expect(PortfolioService.getRealizedPnL('USD')).toBe(0)
+    })
+
+    it('ignores long/short entries', () => {
+      JournalService.create({
+        actionType: 'long',
+        ticker: 'BTC',
+        quantity: 1,
+        price: 50000,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+      })
+
+      expect(PortfolioService.getRealizedPnL('BTC')).toBe(0)
+    })
+  })
+
+  describe('getCombinedPnL', () => {
+    it('returns realized and unrealized P&L', () => {
+      const buy = JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 20,
+        price: 100,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 2000 },
+      })
+
+      // Sell half at profit
+      JournalService.create({
+        actionType: 'sell',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 150,
+        entryTime: '2024-02-01T00:00:00Z',
+        positionMode: 'existing',
+        positionId: buy.position.id,
+      })
+
+      // Set current price for unrealized
+      PortfolioService.setCurrentPrice(buy.position.id, 175)
+      const pos = PortfolioService.get(buy.position.id)!
+
+      const pnl = PortfolioService.getCombinedPnL(pos)
+
+      // Realized = (150-100)*10 = 500
+      // Unrealized = (175-100)*10 = 750
+      // Combined = 1250
+      expect(pnl.realized).toBe(500)
+      expect(pnl.unrealized).toBe(750)
+      expect(pnl.combined).toBe(1250)
+    })
+
+    it('returns null combined if no current price', () => {
+      const buy = JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 100,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1000 },
+      })
+
+      const pnl = PortfolioService.getCombinedPnL(buy.position)
+
+      expect(pnl.realized).toBe(0)
+      expect(pnl.unrealized).toBeNull()
+      expect(pnl.combined).toBeNull()
+    })
+  })
+
+  describe('getPortfolioTotals', () => {
+    it('returns zeros for empty portfolio', () => {
+      const totals = PortfolioService.getPortfolioTotals()
+
+      expect(totals.totalValue).toBe(0)
+      expect(totals.totalCostBasis).toBe(0)
+      expect(totals.unrealizedPnL).toBe(0)
+      expect(totals.realizedPnL).toBe(0)
+      expect(totals.combinedPnL).toBe(0)
+      expect(totals.positionCount).toBe(0)
+    })
+
+    it('calculates totals for single position', () => {
+      const buy = JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 100,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1000 },
+      })
+
+      PortfolioService.setCurrentPrice(buy.position.id, 150)
+
+      const totals = PortfolioService.getPortfolioTotals()
+
+      expect(totals.totalCostBasis).toBe(1000)  // 10 * 100
+      expect(totals.totalValue).toBe(1500)      // 10 * 150
+      expect(totals.unrealizedPnL).toBe(500)    // 10 * (150-100)
+      expect(totals.realizedPnL).toBe(0)
+      expect(totals.combinedPnL).toBe(500)
+      expect(totals.positionCount).toBe(1)
+    })
+
+    it('excludes leveraged positions', () => {
+      JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 100,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1000 },
+      })
+
+      JournalService.create({
+        actionType: 'long',
+        ticker: 'BTC',
+        quantity: 1,
+        price: 50000,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+      })
+
+      const totals = PortfolioService.getPortfolioTotals()
+
+      expect(totals.positionCount).toBe(1)
+      expect(totals.totalCostBasis).toBe(1000) // Only AAPL
+    })
+
+    it('excludes cash positions', () => {
+      JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 100,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1000 },
+      })
+
+      JournalService.create({
+        actionType: 'deposit',
+        ticker: 'USD',
+        quantity: 5000,
+        price: 1,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+      })
+
+      const totals = PortfolioService.getPortfolioTotals()
+
+      expect(totals.positionCount).toBe(1)
+      expect(totals.totalCostBasis).toBe(1000)
+    })
+
+    it('returns null unrealized if any position missing price', () => {
+      const buy1 = JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 100,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1000 },
+      })
+
+      JournalService.create({
+        actionType: 'buy',
+        ticker: 'MSFT',
+        quantity: 5,
+        price: 200,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1000 },
+      })
+
+      // Only set price for AAPL
+      PortfolioService.setCurrentPrice(buy1.position.id, 150)
+
+      const totals = PortfolioService.getPortfolioTotals()
+
+      expect(totals.unrealizedPnL).toBeNull()
+      expect(totals.combinedPnL).toBeNull()
+      expect(totals.positionCount).toBe(2)
+    })
+
+    it('includes realized P&L from closed positions', () => {
+      const buy = JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 100,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1000 },
+      })
+
+      // Sell all to close
+      JournalService.create({
+        actionType: 'sell',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 150,
+        entryTime: '2024-02-01T00:00:00Z',
+        positionMode: 'existing',
+        positionId: buy.position.id,
+      })
+
+      const totals = PortfolioService.getPortfolioTotals()
+
+      expect(totals.positionCount).toBe(0) // No open positions
+      expect(totals.realizedPnL).toBe(500) // But realized P&L is counted
+    })
+  })
+
+  describe('getHistoricalSnapshots', () => {
+    it('returns empty array when no journal entries', () => {
+      const snapshots = PortfolioService.getHistoricalSnapshots()
+      expect(snapshots).toEqual([])
+    })
+
+    it('tracks portfolio value over time', () => {
+      JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 100,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1000 },
+      })
+
+      const snapshots = PortfolioService.getHistoricalSnapshots()
+
+      expect(snapshots).toHaveLength(1)
+      expect(snapshots[0].portfolioValue).toBe(1000) // 10 * 100
+      expect(snapshots[0].cumulativePnL).toBe(0)
+    })
+
+    it('tracks cumulative P&L from sells', () => {
+      const buy = JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 100,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1000 },
+      })
+
+      JournalService.create({
+        actionType: 'sell',
+        ticker: 'AAPL',
+        quantity: 5,
+        price: 150,
+        entryTime: '2024-02-01T00:00:00Z',
+        positionMode: 'existing',
+        positionId: buy.position.id,
+      })
+
+      const snapshots = PortfolioService.getHistoricalSnapshots()
+
+      expect(snapshots).toHaveLength(2)
+      expect(snapshots[1].cumulativePnL).toBe(250) // (150-100)*5
+    })
+
+    it('ignores deposit/withdraw entries', () => {
+      JournalService.create({
+        actionType: 'deposit',
+        ticker: 'USD',
+        quantity: 5000,
+        price: 1,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+      })
+
+      const snapshots = PortfolioService.getHistoricalSnapshots()
+      expect(snapshots).toEqual([])
+    })
+
+    it('ignores long/short entries', () => {
+      JournalService.create({
+        actionType: 'long',
+        ticker: 'BTC',
+        quantity: 1,
+        price: 50000,
+        entryTime: '2024-01-01T00:00:00Z',
+        positionMode: 'new',
+      })
+
+      const snapshots = PortfolioService.getHistoricalSnapshots()
+      expect(snapshots).toEqual([])
+    })
+
+    it('orders snapshots by entry time', () => {
+      JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 100,
+        entryTime: '2024-01-15T00:00:00Z', // Second chronologically
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1000 },
+      })
+
+      JournalService.create({
+        actionType: 'buy',
+        ticker: 'MSFT',
+        quantity: 5,
+        price: 200,
+        entryTime: '2024-01-01T00:00:00Z', // First chronologically
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1000 },
+      })
+
+      const snapshots = PortfolioService.getHistoricalSnapshots()
+
+      expect(snapshots[0].date).toBe('2024-01-01T00:00:00Z')
+      expect(snapshots[1].date).toBe('2024-01-15T00:00:00Z')
+    })
+  })
+
+  describe('Linkage Integrity', () => {
+    // Helper to create a journal entry with the new schema
+    const createJournalEntry = () => {
+      return JournalService.create({
+        actionType: 'buy',
+        ticker: 'AAPL',
+        quantity: 10,
+        price: 150,
+        entryTime: new Date().toISOString(),
+        positionMode: 'new',
+        payment: { asset: 'USD', amount: 1500 },
+      })
+    }
+
+    it('position update should preserve journal relations', () => {
+      // Create journal entry which now also creates a position
+      const result = createJournalEntry()
+
+      const relationsBefore = RelationService.listForEntity({ type: 'journal', id: result.journalEntry.id })
       expect(relationsBefore).toHaveLength(1)
 
-      PortfolioService.update(position.id, {
-        ticker: 'MSFT',
+      PortfolioService.update(result.position.id, {
         quantity: 15,
       })
 
-      const relationsAfter = RelationService.listForEntity({ type: 'journal', id: journal.id })
+      const relationsAfter = RelationService.listForEntity({ type: 'journal', id: result.journalEntry.id })
       expect(relationsAfter).toHaveLength(1)
-      expect(relationsAfter[0].toRef.id).toBe(position.id)
+      expect(relationsAfter[0].toRef.id).toBe(result.position.id)
     })
 
     it('position archive should preserve journal relations', () => {
-      const journal = JournalService.create({
-        type: 'decision',
-        title: 'Buy AAPL',
-        content: 'Adding AAPL to portfolio',
-      })
+      const result = createJournalEntry()
 
-      const position = PortfolioService.create({
-        ticker: 'AAPL',
-        quantity: 10,
-        avgCost: 150,
-      })
-
-      RelationService.create(
-        { type: 'journal', id: journal.id },
-        { type: 'position', id: position.id },
-        'related'
-      )
-
-      const relationsBefore = RelationService.listForEntity({ type: 'journal', id: journal.id })
+      const relationsBefore = RelationService.listForEntity({ type: 'journal', id: result.journalEntry.id })
       expect(relationsBefore).toHaveLength(1)
 
-      PortfolioService.archive(position.id)
+      PortfolioService.archive(result.position.id)
 
-      const relationsAfter = RelationService.listForEntity({ type: 'journal', id: journal.id })
+      const relationsAfter = RelationService.listForEntity({ type: 'journal', id: result.journalEntry.id })
       expect(relationsAfter).toHaveLength(1)
-      expect(relationsAfter[0].toRef.id).toBe(position.id)
+      expect(relationsAfter[0].toRef.id).toBe(result.position.id)
     })
 
     it('position archive should preserve relations from journal side', () => {
-      const journal = JournalService.create({
-        type: 'decision',
-        title: 'Buy AAPL',
-        content: 'Adding AAPL to portfolio',
-      })
+      const result = createJournalEntry()
 
-      const position = PortfolioService.create({
-        ticker: 'AAPL',
-        quantity: 10,
-        avgCost: 150,
-      })
+      PortfolioService.archive(result.position.id)
 
-      RelationService.create(
-        { type: 'journal', id: journal.id },
-        { type: 'position', id: position.id },
-        'related'
-      )
-
-      PortfolioService.archive(position.id)
-
-      const relationsFromPosition = RelationService.listForEntity({ type: 'position', id: position.id })
+      const relationsFromPosition = RelationService.listForEntity({ type: 'position', id: result.position.id })
       expect(relationsFromPosition).toHaveLength(1)
-      expect(relationsFromPosition[0].fromRef.id).toBe(journal.id)
+      expect(relationsFromPosition[0].fromRef.id).toBe(result.journalEntry.id)
     })
 
     it('position update with closedAt should preserve relations', () => {
-      const journal = JournalService.create({
-        type: 'decision',
-        title: 'Buy AAPL',
-        content: 'Adding AAPL to portfolio',
-      })
+      const result = createJournalEntry()
 
-      const position = PortfolioService.create({
-        ticker: 'AAPL',
-        quantity: 10,
-        avgCost: 150,
-      })
-
-      RelationService.create(
-        { type: 'journal', id: journal.id },
-        { type: 'position', id: position.id },
-        'related'
-      )
-
-      PortfolioService.update(position.id, {
+      PortfolioService.update(result.position.id, {
         closedAt: '2024-06-15T00:00:00.000Z',
       })
 
-      const relations = RelationService.listForEntity({ type: 'journal', id: journal.id })
+      const relations = RelationService.listForEntity({ type: 'journal', id: result.journalEntry.id })
       expect(relations).toHaveLength(1)
 
-      const updatedPosition = PortfolioService.get(position.id)
+      const updatedPosition = PortfolioService.get(result.position.id)
       expect(updatedPosition?.closedAt).toBe('2024-06-15T00:00:00.000Z')
     })
   })

@@ -137,12 +137,14 @@ function resolveEntity(
     case 'journal': {
       const entry = JournalService.get(ref.id)
       if (!entry) return null
+      // New journal schema: use actionType + ticker for preview
+      const preview = `${entry.actionType.toUpperCase()} ${entry.ticker} - ${entry.quantity} @ $${entry.price.toFixed(2)}`
       return {
         ref,
         relationType,
         direction,
-        label: `Journal (${entry.type})`,
-        preview: entry.title,
+        label: `Trade (${entry.actionType})`,
+        preview,
         link: `/journal/${ref.id}`,
       }
     }

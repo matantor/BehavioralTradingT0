@@ -35,6 +35,7 @@ export interface Position {
   assetType?: 'equity' | 'etf' | 'crypto' | 'cash' | 'other'
   quantity: number
   avgCost: number
+  currentPrice?: number  // Manual current price for P&L calculations
   currency: string
   openedAt?: string
   closedAt?: string
@@ -46,7 +47,51 @@ export interface Position {
   meta?: Record<string, unknown>
 }
 
-// PortfolioAction: embedded in JournalEntry
+// ActionType: trading action types for journal entries
+export type ActionType = 'buy' | 'sell' | 'long' | 'short' | 'deposit' | 'withdraw'
+
+// PositionMode: whether entry creates new position or affects existing
+export type PositionMode = 'new' | 'existing'
+
+// PaymentInfo: payment details for buy actions
+export interface PaymentInfo {
+  asset: string          // e.g., 'USD', 'BTC'
+  amount: number         // how much was paid
+  isNewMoney?: boolean   // if true, don't subtract from existing cash
+}
+
+// JournalEntry: executed trading action (decision only, no reflections)
+// Per TASKLIST Part 1: all entries require mandatory trading fields
+export interface JournalEntry {
+  id: string
+  createdAt: string
+  updatedAt: string
+
+  // Mandatory fields (cannot save without these)
+  type: 'decision'                    // only decision type; reflections go to Thoughts
+  actionType: ActionType              // buy, sell, long, short, deposit, withdraw
+  ticker: string                      // instrument symbol
+  quantity: number                    // transaction quantity
+  price: number                       // price per unit
+  entryTime: string                   // when action occurred (editable, default=now)
+  positionMode: PositionMode          // 'new' or 'existing'
+  positionId?: string                 // required if positionMode='existing'
+
+  // Payment (required for buy actions)
+  payment?: PaymentInfo               // what was paid; required for actionType='buy'
+
+  // Optional fields (recordable but skippable)
+  // These go in meta to keep the main interface clean
+  // meta.sector, meta.assetClass, meta.rationale, meta.timeHorizon,
+  // meta.priceTargets, meta.invalidation, meta.emotions, meta.confidence,
+  // meta.fees, meta.venue, meta.status, meta.reminders
+
+  archivedAt?: string
+  meta?: Record<string, unknown>
+}
+
+// Legacy PortfolioAction: kept for backwards compatibility with existing entries
+// New entries use JournalEntry fields directly; this is only for migration
 export interface PortfolioAction {
   actionType: 'buy' | 'sell' | 'set_position' | 'close_position'
   positionId?: string
@@ -56,19 +101,6 @@ export interface PortfolioAction {
   fees?: number
   executedAt?: string
   note?: string
-}
-
-// JournalEntry: decision, reflection, or note
-export interface JournalEntry {
-  id: string
-  createdAt: string
-  updatedAt: string
-  type: 'decision' | 'reflection' | 'note'
-  title: string
-  content: string
-  portfolioAction?: PortfolioAction
-  archivedAt?: string
-  meta?: Record<string, unknown>
 }
 
 // Thought: standalone thought or idea
