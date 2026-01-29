@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { MOBILE_MAX_WIDTH } from './AppShell'
+import { cn } from '@/lib/utils'
 
 export default function BottomTabs() {
   const location = useLocation()
@@ -15,31 +16,22 @@ export default function BottomTabs() {
   ]
 
   return (
-    <div style={{
-      position: 'fixed',
-      bottom: 0,
-      left: '50%',
-      transform: 'translateX(-50%)',
-      width: '100%',
-      maxWidth: MOBILE_MAX_WIDTH,
-      display: 'flex',
-      justifyContent: 'space-around',
-      padding: '0.5rem 0',
-      borderTop: '1px solid #e5e7eb',
-      backgroundColor: '#ffffff',
-      boxSizing: 'border-box'
-    }}>
+    <div
+      className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full flex justify-around py-2 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900"
+      style={{ maxWidth: MOBILE_MAX_WIDTH }}
+    >
       {tabs.map((tab) => (
         <NavLink
           key={tab.path}
           to={tab.path}
-          style={({ isActive }) => ({
-            textDecoration: 'none',
-            color: isActive ? '#3b82f6' : '#6b7280',
-            fontSize: '0.875rem',
-            fontWeight: isActive ? '600' : '400',
-            padding: '0.5rem'
-          })}
+          className={({ isActive }) =>
+            cn(
+              "text-sm p-2 no-underline transition-colors",
+              isActive
+                ? "text-zinc-900 dark:text-zinc-100 font-semibold"
+                : "text-zinc-500 dark:text-zinc-400 font-normal hover:text-zinc-700 dark:hover:text-zinc-300"
+            )
+          }
         >
           {tab.label}
         </NavLink>
