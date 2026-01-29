@@ -7,17 +7,8 @@ interface PageHeaderProps {
 
 export default function PageHeader({ title, actionButton }: PageHeaderProps) {
   return (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: '1rem'
-    }}>
-      <h1 style={{
-        fontSize: '1.5rem',
-        fontWeight: '600',
-        margin: 0
-      }}>
+    <div className="flex justify-between items-center mb-4">
+      <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
         {title}
       </h1>
       {actionButton && (
