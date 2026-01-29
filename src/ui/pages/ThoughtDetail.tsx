@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
-import Card from '../components/Card'
+import { Card } from '@/components/ui/card'
 import LinkedItems from '../components/LinkedItems'
 import { ThoughtService, ThreadService, getThoughtKind } from '@/domain/services'
 import type { Thought, ThreadMessage } from '@/domain/types/entities'
@@ -59,14 +59,7 @@ export default function ThoughtDetail() {
       actionButton={
         <Link
           to="/thoughts"
-          style={{
-            padding: '0.5rem 1rem',
-            backgroundColor: '#e5e7eb',
-            color: '#374151',
-            borderRadius: '0.25rem',
-            textDecoration: 'none',
-            fontSize: '0.875rem',
-          }}
+          className="px-4 py-2 bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded text-sm no-underline hover:bg-zinc-300 dark:hover:bg-zinc-600"
         >
           Back
         </Link>
@@ -78,8 +71,8 @@ export default function ThoughtDetail() {
     return (
       <>
         {header}
-        <Card>
-          <p style={{ color: '#6b7280' }}>Thought not found.</p>
+        <Card className="p-5 md:p-6">
+          <p className="text-zinc-500 dark:text-zinc-400">Thought not found.</p>
         </Card>
       </>
     )
@@ -90,62 +83,37 @@ export default function ThoughtDetail() {
       {header}
 
       {/* Promote/Demote action */}
-      <Card>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <Card className="p-5 md:p-6 mb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
             {isMiniThesis ? (
               <>
-                <span
-                  style={{
-                    padding: '0.25rem 0.5rem',
-                    backgroundColor: '#a855f7',
-                    color: 'white',
-                    borderRadius: '0.25rem',
-                    fontSize: '0.75rem',
-                    fontWeight: '600',
-                  }}
-                >
+                <span className="px-2 py-1 bg-purple-500 text-white rounded text-xs font-semibold">
                   MINI-THESIS
                 </span>
-                <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>
+                <span className="text-zinc-500 dark:text-zinc-400 text-sm">
                   This is a thesis you want to act on or monitor.
                 </span>
               </>
             ) : (
-              <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>
+              <span className="text-zinc-500 dark:text-zinc-400 text-sm">
                 This is an exploratory thought.
               </span>
             )}
           </div>
         </div>
-        <div style={{ marginTop: '0.75rem' }}>
+        <div className="mt-3">
           {isMiniThesis ? (
             <button
               onClick={handleDemote}
-              style={{
-                padding: '0.5rem 1rem',
-                backgroundColor: '#f3f4f6',
-                color: '#374151',
-                border: '1px solid #d1d5db',
-                borderRadius: '0.25rem',
-                fontSize: '0.875rem',
-                cursor: 'pointer',
-              }}
+              className="px-4 py-2 bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 border border-zinc-300 dark:border-zinc-600 rounded text-sm cursor-pointer hover:bg-zinc-200 dark:hover:bg-zinc-600"
             >
               Demote to Thought
             </button>
           ) : (
             <button
               onClick={handlePromote}
-              style={{
-                padding: '0.5rem 1rem',
-                backgroundColor: '#a855f7',
-                color: 'white',
-                border: 'none',
-                borderRadius: '0.25rem',
-                fontSize: '0.875rem',
-                cursor: 'pointer',
-              }}
+              className="px-4 py-2 bg-purple-500 dark:bg-purple-600 text-white rounded text-sm cursor-pointer hover:bg-purple-600 dark:hover:bg-purple-700"
             >
               Promote to Mini-thesis
             </button>
@@ -153,21 +121,21 @@ export default function ThoughtDetail() {
         </div>
       </Card>
 
-      <Card>
-        <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.75rem' }}>
+      <Card className="p-5 md:p-6 mb-4">
+        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-3">
           Content
         </h2>
-        <p style={{ color: '#374151', fontSize: '1rem', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
+        <p className="text-zinc-700 dark:text-zinc-300 text-base leading-relaxed whitespace-pre-wrap">
           {thought.content}
         </p>
-        <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #e5e7eb' }}>
-          <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}>
+        <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700">
+          <span className="text-zinc-400 dark:text-zinc-500 text-xs font-mono">
             Created: {new Date(thought.createdAt).toLocaleString()}
           </span>
           {thought.updatedAt !== thought.createdAt && (
             <>
               <br />
-              <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}>
+              <span className="text-zinc-400 dark:text-zinc-500 text-xs font-mono">
                 Updated: {new Date(thought.updatedAt).toLocaleString()}
               </span>
             </>
@@ -175,32 +143,26 @@ export default function ThoughtDetail() {
         </div>
       </Card>
 
-      <Card>
-        <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.75rem' }}>
+      <Card className="p-5 md:p-6 mb-4">
+        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-3">
           Thread ({messages.length})
         </h2>
 
         {messages.length === 0 ? (
-          <p style={{ color: '#6b7280', marginBottom: '0.75rem' }}>
+          <p className="text-zinc-500 dark:text-zinc-400 mb-3">
             No messages yet. Add notes, follow-ups, or reflections on this thought.
           </p>
         ) : (
-          <div style={{ marginBottom: '0.75rem' }}>
+          <div className="mb-3 space-y-2">
             {messages.map((msg) => (
               <div
                 key={msg.id}
-                style={{
-                  padding: '0.5rem 0.75rem',
-                  marginBottom: '0.5rem',
-                  backgroundColor: '#f3f4f6',
-                  borderRadius: '0.25rem',
-                  borderLeft: '2px solid #8b5cf6',
-                }}
+                className="px-3 py-2 bg-zinc-100 dark:bg-zinc-800 rounded border-l-2 border-l-violet-500"
               >
-                <p style={{ color: '#374151', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
+                <p className="text-zinc-700 dark:text-zinc-300 text-sm mb-1">
                   {msg.content}
                 </p>
-                <p style={{ color: '#9ca3af', fontSize: '0.6875rem' }}>
+                <p className="text-zinc-400 dark:text-zinc-500 text-[11px]">
                   {new Date(msg.createdAt).toLocaleString()}
                 </p>
               </div>
@@ -209,31 +171,17 @@ export default function ThoughtDetail() {
         )}
 
         <form onSubmit={handleAddMessage}>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div className="flex gap-2">
             <input
               type="text"
               placeholder="Add a note or follow-up..."
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              style={{
-                flex: 1,
-                padding: '0.5rem',
-                border: '1px solid #d1d5db',
-                borderRadius: '0.25rem',
-                fontSize: '0.875rem',
-              }}
+              className="flex-1 p-2 border border-zinc-300 dark:border-zinc-600 rounded text-sm bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
             />
             <button
               type="submit"
-              style={{
-                padding: '0.5rem 1rem',
-                backgroundColor: '#8b5cf6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '0.25rem',
-                fontSize: '0.875rem',
-                cursor: 'pointer',
-              }}
+              className="px-4 py-2 bg-violet-500 dark:bg-violet-600 text-white rounded text-sm cursor-pointer hover:bg-violet-600 dark:hover:bg-violet-700"
             >
               Add
             </button>
