@@ -2,11 +2,13 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import { Card } from '@/components/ui/card'
-import { PortfolioService } from '@/domain/services'
+import { PortfolioService, PricingService } from '@/domain/services'
 import type { Position } from '@/domain/types/entities'
+import type { RefreshResult } from '@/domain/types/pricing'
 import { cn } from '@/lib/utils'
 
 type PnLView = 'combined' | 'realized' | 'unrealized'
+type RefreshStatus = 'idle' | 'loading' | 'success' | 'error'
 
 export default function Portfolio() {
   const [positions, setPositions] = useState<Position[]>([])
@@ -14,6 +16,9 @@ export default function Portfolio() {
   const [pnlView, setPnlView] = useState<PnLView>('combined')
   const [currentPrices, setCurrentPrices] = useState<Record<string, string>>({})
   const [totals, setTotals] = useState(PortfolioService.getPortfolioTotals())
+  const [refreshStatus, setRefreshStatus] = useState<RefreshStatus>('idle')
+  const [lastRefreshed, setLastRefreshed] = useState<string | null>(PricingService.getLastRefreshed())
+  const [refreshResult, setRefreshResult] = useState<RefreshResult | null>(null)
 
   const loadPositions = useCallback(() => {
     const data = showClosed ? PortfolioService.listClosed() : PortfolioService.listOpen()
@@ -50,6 +55,52 @@ export default function Portfolio() {
     loadPositions()
   }
 
+  const handleRefreshPrices = async () => {
+    setRefreshStatus('loading')
+    setRefreshResult(null)
+
+    try {
+      // Only refresh open positions
+      const openPositions = PortfolioService.listOpen()
+      const result = await PricingService.refreshAll(openPositions)
+
+      setRefreshResult(result)
+      setLastRefreshed(PricingService.getLastRefreshed())
+
+      if (result.failed.length > 0 && result.success.length === 0) {
+        setRefreshStatus('error')
+      } else {
+        setRefreshStatus('success')
+      }
+
+      // Reload to reflect any new market prices
+      loadPositions()
+
+      // Clear status after 5 seconds
+      setTimeout(() => {
+        setRefreshStatus('idle')
+        setRefreshResult(null)
+      }, 5000)
+    } catch (error) {
+      console.error('Price refresh failed:', error)
+      setRefreshStatus('error')
+      setTimeout(() => setRefreshStatus('idle'), 5000)
+    }
+  }
+
+  const formatRelativeTime = (isoString: string): string => {
+    const date = new Date(isoString)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+
+    if (diffMins < 1) return 'just now'
+    if (diffMins < 60) return `${diffMins}m ago`
+    const diffHours = Math.floor(diffMins / 60)
+    if (diffHours < 24) return `${diffHours}h ago`
+    return date.toLocaleDateString()
+  }
+
   const header = <PageHeader title="Portfolio" />
 
   const formatCurrency = (value: number) =>
@@ -73,7 +124,7 @@ export default function Portfolio() {
       {header}
 
       <Card className="p-5 md:p-6 mb-4">
-        <div className="flex justify-between items-center gap-4">
+        <div className="flex justify-between items-start gap-4 flex-wrap">
           <div>
             <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-1">
               Portfolio Totals (Spot Only)
@@ -82,21 +133,73 @@ export default function Portfolio() {
               Open positions: {totals.positionCount}
             </p>
           </div>
-          <div>
-            <label className="text-xs text-zinc-500 dark:text-zinc-400 block mb-1">
-              P&amp;L View
-            </label>
-            <select
-              value={pnlView}
-              onChange={(e) => setPnlView(e.target.value as PnLView)}
-              className="px-2 py-1 border border-zinc-300 dark:border-zinc-700 rounded bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 text-sm"
-            >
-              <option value="combined">Combined</option>
-              <option value="realized">Realized</option>
-              <option value="unrealized">Unrealized</option>
-            </select>
+          <div className="flex gap-3 items-start">
+            <div>
+              <label className="text-xs text-zinc-500 dark:text-zinc-400 block mb-1">
+                P&amp;L View
+              </label>
+              <select
+                value={pnlView}
+                onChange={(e) => setPnlView(e.target.value as PnLView)}
+                className="px-2 py-1 border border-zinc-300 dark:border-zinc-700 rounded bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 text-sm"
+              >
+                <option value="combined">Combined</option>
+                <option value="realized">Realized</option>
+                <option value="unrealized">Unrealized</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-zinc-500 dark:text-zinc-400 block mb-1">
+                Market Prices
+              </label>
+              <button
+                onClick={handleRefreshPrices}
+                disabled={refreshStatus === 'loading'}
+                className={cn(
+                  "px-3 py-1 rounded text-sm cursor-pointer",
+                  refreshStatus === 'loading'
+                    ? "bg-zinc-200 dark:bg-zinc-700 text-zinc-400 dark:text-zinc-500 cursor-wait"
+                    : "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200"
+                )}
+              >
+                {refreshStatus === 'loading' ? 'Refreshing...' : 'Refresh'}
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* Refresh Status Indicator */}
+        {refreshStatus !== 'idle' && refreshStatus !== 'loading' && (
+          <div
+            className={cn(
+              "mt-3 px-3 py-2 rounded text-sm",
+              refreshStatus === 'success'
+                ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300"
+                : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300"
+            )}
+          >
+            {refreshResult && (
+              <>
+                {refreshResult.success.length > 0 && (
+                  <span>Updated: {refreshResult.success.join(', ')}</span>
+                )}
+                {refreshResult.failed.length > 0 && (
+                  <span className="block">Failed: {refreshResult.failed.join(', ')}</span>
+                )}
+                {refreshResult.skipped.length > 0 && refreshResult.success.length === 0 && refreshResult.failed.length === 0 && (
+                  <span>All prices are fresh</span>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Last Refreshed Timestamp */}
+        {lastRefreshed && (
+          <p className="mt-2 text-xs text-zinc-400 dark:text-zinc-500">
+            Prices last updated: {formatRelativeTime(lastRefreshed)}
+          </p>
+        )}
         <div className="mt-3 grid gap-2">
           <div className="flex justify-between">
             <span className="text-sm text-zinc-500 dark:text-zinc-400">Total Value</span>
@@ -146,6 +249,8 @@ export default function Portfolio() {
             {positions.map((position) => {
               const isLeveraged = PortfolioService.isLeveraged(position)
               const pnl = PortfolioService.getCombinedPnL(position)
+              const marketPriceStatus = PortfolioService.getMarketPriceWithStatus(position)
+              const effectivePriceInfo = PortfolioService.getEffectivePriceWithSource(position)
 
               return (
                 <Link
@@ -176,6 +281,30 @@ export default function Portfolio() {
                       <span className="font-mono tabular-nums">
                         Value: ${(position.quantity * position.avgCost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
+
+                      {/* Price Info */}
+                      <div className="flex gap-3 flex-wrap">
+                        {position.currentPrice !== undefined && (
+                          <span className="font-mono tabular-nums">
+                            Manual: ${position.currentPrice.toFixed(2)}
+                          </span>
+                        )}
+                        {marketPriceStatus.price !== null && (
+                          <span className={cn(
+                            "font-mono tabular-nums",
+                            marketPriceStatus.isStale && "text-amber-600 dark:text-amber-400"
+                          )}>
+                            Market: ${marketPriceStatus.price.toFixed(2)}
+                            {marketPriceStatus.isStale && " (stale)"}
+                          </span>
+                        )}
+                        {effectivePriceInfo.price !== null && (
+                          <span className="font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
+                            Using: {effectivePriceInfo.source}
+                          </span>
+                        )}
+                      </div>
+
                       <span className="font-mono tabular-nums">Realized P&amp;L: {renderPnLValue(pnl.realized, isLeveraged)}</span>
                       <span className="font-mono tabular-nums">Unrealized P&amp;L: {renderPnLValue(pnl.unrealized, isLeveraged)}</span>
                       <span className="font-mono tabular-nums">Combined P&amp;L: {renderPnLValue(pnl.combined, isLeveraged)}</span>

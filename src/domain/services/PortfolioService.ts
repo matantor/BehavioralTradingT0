@@ -5,6 +5,7 @@
 import type { Position } from '@/domain/types/entities'
 import { PositionRepository } from '@/domain/repositories/PositionRepository'
 import { JournalRepository } from '@/domain/repositories/JournalRepository'
+import { PricingService } from './PricingService'
 
 // P&L result types
 export interface PnLResult {
@@ -91,6 +92,53 @@ class PortfolioServiceClass {
       throw new Error('Price cannot be negative')
     }
     return PositionRepository.update(positionId, { currentPrice: price })
+  }
+
+  /**
+   * Get market price from price cache for a position
+   * Returns null if not in cache
+   */
+  getMarketPrice(position: Position): number | null {
+    return PricingService.getMarketPrice(position)
+  }
+
+  /**
+   * Get market price with staleness indicator
+   */
+  getMarketPriceWithStatus(position: Position): { price: number | null; isStale: boolean } {
+    return PricingService.getMarketPriceWithStatus(position)
+  }
+
+  /**
+   * Get effective price for P&L calculations
+   * Per approved architecture: Manual price always wins
+   * Falls back to market price if no manual price set
+   */
+  getEffectivePrice(position: Position): number | null {
+    // Manual price takes priority
+    if (position.currentPrice !== undefined) {
+      return position.currentPrice
+    }
+    // Fall back to market price
+    return PricingService.getMarketPrice(position)
+  }
+
+  /**
+   * Get effective price with source indicator
+   */
+  getEffectivePriceWithSource(position: Position): {
+    price: number | null
+    source: 'manual' | 'market' | 'none'
+    isStale: boolean
+  } {
+    if (position.currentPrice !== undefined) {
+      return { price: position.currentPrice, source: 'manual', isStale: false }
+    }
+    const marketStatus = PricingService.getMarketPriceWithStatus(position)
+    if (marketStatus.price !== null) {
+      return { price: marketStatus.price, source: 'market', isStale: marketStatus.isStale }
+    }
+    return { price: null, source: 'none', isStale: false }
   }
 
   /**

@@ -10,6 +10,7 @@ export { ThreadService } from './ThreadService'
 export { RelationService, type DeriveResult } from './RelationService'
 export { EventService } from './EventService'
 export { OnboardingService } from './OnboardingService'
+export { PricingService } from './PricingService'
 
 // Re-export types for UI convenience
 export type { ContextAnchor, ActionType, PositionMode, PaymentInfo } from '@/domain/types/entities'

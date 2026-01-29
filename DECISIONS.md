@@ -26,3 +26,6 @@ Rules:
 - 2026-01-12: In v1, journal entries explicitly distinguish action/decision entries from non-action reflections. This classification enables future action–intent gap analysis.
 - 2026-01-12: In v1, every action/decision journal entry must explicitly capture intent context (NorthStar or explicit none) at entry time. No inference or retroactive linking is allowed.
 - 2026-01-28: Trading Journal contains only executed actions (type: 'decision'). Reflections and ideas belong in Thoughts & Theses. All journal entries require mandatory trading fields (actionType, ticker, quantity, price, entryTime, positionMode, payment for buys).
+- 2026-01-29: Market price data uses separate localStorage cache (bt_price_cache), distinct from main app storage. Market prices are derived data that never overwrite Position.currentPrice (manual entries).
+- 2026-01-29: Price priority for P&L: manual price always wins. Market price is fallback only when no manual price exists.
+- 2026-01-29: Price providers (Yahoo Finance, CoinGecko) are abstracted behind PriceProvider interface for replaceability. Ticker normalization happens internally (e.g., BTC → bitcoin for CoinGecko).

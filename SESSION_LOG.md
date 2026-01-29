@@ -1720,3 +1720,60 @@ Work completed:
 
 Verification:
 - npm run verify: PASS (lint, typecheck, test, build)
+
+---
+
+### UI Refactor Phase — CLOSED
+
+- All inline styles removed
+- Tailwind CSS + shadcn/ui used everywhere
+- All pages converted (Dashboard, Portfolio, Journal, Thoughts, North Star, Settings, etc.)
+- Shared components converted (AppShell, PageHeader, BottomTabs, ContextSelector, LinkedItems)
+- Custom Card component deleted
+- Build and lint passing
+- Core logic and handlers preserved
+- Visual quality improved but not finalized
+- Portfolio layout intentionally left functional, not market-style
+- Live price APIs intentionally deferred
+
+---
+
+## 2026-01-29 — Session 26 (Data & Pricing Architecture v1)
+
+Goal:
+- Introduce market price data with free APIs
+- Offline-tolerant, provider-agnostic architecture
+- Manual prices always win for P&L
+
+Planning Decisions Approved:
+1. Manual price always wins for P&L calculations
+2. Separate localStorage key (bt_price_cache) for price data
+3. Normalize tickers internally (user stays provider-agnostic)
+4. Use existing assetType field for provider selection
+5. Open positions only for refresh scope
+6. Inline non-intrusive error indicators
+7. Direct fetch first (no proxy/backend)
+
+Files Created:
+- src/domain/types/pricing.ts — CachedPrice, PriceCache, RefreshResult, PriceProvider types
+- src/lib/storage/priceCache.ts — Separate localStorage cache for prices
+- src/domain/providers/YahooFinanceProvider.ts — Stocks/ETFs via Yahoo Finance
+- src/domain/providers/CoinGeckoProvider.ts — Crypto via CoinGecko (with ticker mapping)
+- src/domain/providers/index.ts — Provider exports
+- src/domain/services/PricingService.ts — Fetch, cache, expose market prices
+
+Files Modified:
+- src/domain/services/PortfolioService.ts — Added getMarketPrice, getEffectivePrice methods
+- src/domain/services/index.ts — Export PricingService
+- src/ui/pages/Portfolio.tsx — Refresh Prices button, market price display, staleness indicator
+
+Architecture:
+- PricingService owns price cache (read/write)
+- Providers abstracted behind PriceProvider interface
+- Position.currentPrice preserved as manual override
+- Market prices are derived data in separate cache
+- UI shows both manual and market prices with source indicator
+
+Verification:
+- npm run build: PASS
+- npm run lint: PASS
