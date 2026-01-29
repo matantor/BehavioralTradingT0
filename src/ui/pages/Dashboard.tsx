@@ -1,155 +1,186 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import PageHeader from '../components/PageHeader'
-import Card from '../components/Card'
-import { PortfolioService, NorthStarService } from '@/domain/services'
-import type { Position, ThesisVersion } from '@/domain/types/entities'
+import { Area, AreaChart } from 'recharts'
+import { PortfolioService, NorthStarService, type PortfolioTotals, type HistoricalSnapshot } from '@/domain/services'
+import type { ThesisVersion } from '@/domain/types/entities'
+import { Card } from '@/components/ui/card'
+import { ChartContainer, ChartTooltip, type ChartConfig } from '@/components/ui/chart'
+import { cn } from '@/lib/utils'
+import {
+  Briefcase,
+  BookOpen,
+  Lightbulb,
+  BarChart3,
+  Settings
+} from 'lucide-react'
+
+const chartConfig = {
+  portfolioValue: {
+    label: "Value",
+  },
+} satisfies ChartConfig
 
 export default function Dashboard() {
-  const [positions, setPositions] = useState<Position[]>([])
+  const [totals, setTotals] = useState<PortfolioTotals | null>(null)
   const [thesis, setThesis] = useState<ThesisVersion | null>(null)
+  const [history, setHistory] = useState<HistoricalSnapshot[]>([])
 
   const loadData = useCallback(() => {
-    // Load active positions
-    const positionData = PortfolioService.list(false)
-    setPositions(positionData)
+    const portfolioTotals = PortfolioService.getPortfolioTotals()
+    setTotals(portfolioTotals)
 
-    // Load current thesis
     const thesisData = NorthStarService.getCurrent()
     setThesis(thesisData)
+
+    const historicalData = PortfolioService.getHistoricalSnapshots()
+    setHistory(historicalData)
   }, [])
 
   useEffect(() => {
     loadData()
   }, [loadData])
 
-  const header = <PageHeader title="Dashboard" />
-
-  // Calculate portfolio summary
-  const totalCostBasis = positions.reduce((sum, p) => sum + p.quantity * p.avgCost, 0)
-  const recentPositions = positions.slice(0, 3)
-
-  // Preview helper
-  const preview = (text: string, maxLen: number) => {
-    if (text.length <= maxLen) return text
-    return text.substring(0, maxLen) + '...'
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(value)
   }
 
-  // Quick Access items
+  const formatPnL = (value: number | null) => {
+    if (value === null) return '—'
+    const sign = value >= 0 ? '+' : ''
+    return sign + formatCurrency(value)
+  }
+
+  const formatTooltipDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric'
+    })
+  }
+
+  // Determine chart color based on P&L
+  const chartColor = totals?.combinedPnL !== null && totals?.combinedPnL !== undefined
+    ? totals.combinedPnL >= 0
+      ? 'hsl(152, 69%, 31%)' // emerald-600
+      : 'hsl(350, 89%, 60%)' // rose-500
+    : 'hsl(215, 16%, 47%)' // slate-500
+
   const quickAccessItems = [
-    { path: '/portfolio', label: 'Portfolio' },
-    { path: '/journal', label: 'Trading Journal' },
-    { path: '/thoughts', label: 'Thoughts & Theses' },
-    { path: '/analytics', label: 'Analytics & Patterns' },
-    { path: '/settings', label: 'Settings' },
+    { path: '/portfolio', label: 'Portfolio', icon: Briefcase },
+    { path: '/journal', label: 'Trading Journal', icon: BookOpen },
+    { path: '/thoughts', label: 'Thoughts & Theses', icon: Lightbulb },
+    { path: '/analytics', label: 'Analytics & Patterns', icon: BarChart3 },
+    { path: '/settings', label: 'Settings', icon: Settings },
   ]
 
   return (
-    <>
-      {header}
-
-      {/* Portfolio Summary */}
-      <Card>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-          <h2 style={{ fontSize: '1.125rem', fontWeight: '600' }}>
-            Portfolio Summary
-          </h2>
-          <Link to="/portfolio" style={{ fontSize: '0.875rem', color: '#3b82f6', textDecoration: 'none' }}>
-            View All
-          </Link>
-        </div>
-        {positions.length === 0 ? (
-          <p style={{ color: '#6b7280' }}>No positions yet. Start building your portfolio.</p>
-        ) : (
-          <>
-            <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '0.75rem' }}>
-              <div>
-                <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>Positions</span>
-                <p style={{ fontWeight: '600', fontSize: '1.25rem' }}>{positions.length}</p>
-              </div>
-              <div>
-                <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>Total Cost Basis</span>
-                <p style={{ fontWeight: '600', fontSize: '1.25rem', color: '#10b981' }}>
-                  ${totalCostBasis.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </p>
-              </div>
-            </div>
-            {recentPositions.length > 0 && (
-              <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '0.5rem' }}>
-                <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>Recent Positions</span>
-                {recentPositions.map((p) => (
-                  <Link
-                    key={p.id}
-                    to={`/positions/${p.id}`}
-                    style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.25rem 0' }}>
-                      <span style={{ fontWeight: '500' }}>{p.ticker}</span>
-                      <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>
-                        {p.quantity} @ ${p.avgCost.toFixed(2)}
-                      </span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </Card>
-
-      {/* North Star */}
-      <Card>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-          <h2 style={{ fontSize: '1.125rem', fontWeight: '600' }}>
-            North Star
-          </h2>
-          <Link to="/northstar" style={{ fontSize: '0.875rem', color: '#3b82f6', textDecoration: 'none' }}>
-            {thesis ? 'Update' : 'Create'}
-          </Link>
-        </div>
-        {thesis ? (
-          <>
-            <p style={{ color: '#374151', lineHeight: '1.5' }}>
-              {preview(thesis.content, 200)}
-            </p>
-            <p style={{ marginTop: '0.5rem', color: '#9ca3af', fontSize: '0.75rem' }}>
-              Last updated: {new Date(thesis.createdAt).toLocaleDateString()}
-            </p>
-          </>
-        ) : (
-          <p style={{ color: '#6b7280' }}>
-            No thesis defined yet. Define your investment thesis to guide your decisions.
+    <div className="pt-2 flex flex-col gap-6">
+      {/* SECTION 1: Portfolio Summary */}
+      <Link to="/portfolio" className="block">
+        <Card className="p-6 cursor-pointer transition-colors hover:bg-accent/50">
+          <span className="text-sm text-muted-foreground">
+            Total Portfolio Value
+          </span>
+          <p className="text-4xl font-bold tracking-tight tabular-nums mt-1">
+            {totals ? formatCurrency(totals.totalValue) : '$0.00'}
           </p>
-        )}
-      </Card>
+          <p className={cn(
+            "text-sm font-medium mt-2",
+            totals?.combinedPnL !== null && totals?.combinedPnL !== undefined
+              ? totals.combinedPnL >= 0
+                ? "text-emerald-600"
+                : "text-rose-600"
+              : "text-muted-foreground"
+          )}>
+            {totals ? formatPnL(totals.combinedPnL) : '—'} Combined P&L
+          </p>
 
-      {/* Quick Access */}
-      <Card>
-        <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.75rem' }}>
-          Quick Access
-        </h2>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-          {quickAccessItems.map((item) => (
+          {/* Historical Chart */}
+          {history.length > 1 && (
+            <div className="mt-4 h-[80px]">
+              <ChartContainer config={chartConfig} className="h-full w-full">
+                <AreaChart
+                  data={history}
+                  margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+                >
+                  <defs>
+                    <linearGradient id="portfolioGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={chartColor} stopOpacity={0.3} />
+                      <stop offset="100%" stopColor={chartColor} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <ChartTooltip
+                    cursor={false}
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null
+                      const data = payload[0].payload as HistoricalSnapshot
+                      return (
+                        <div className="bg-background border rounded-md px-2 py-1 text-xs shadow-sm">
+                          <div className="text-muted-foreground">{formatTooltipDate(data.date)}</div>
+                          <div className="font-medium">{formatCurrency(data.portfolioValue)}</div>
+                        </div>
+                      )
+                    }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="portfolioValue"
+                    stroke={chartColor}
+                    strokeWidth={2}
+                    fill="url(#portfolioGradient)"
+                  />
+                </AreaChart>
+              </ChartContainer>
+            </div>
+          )}
+        </Card>
+      </Link>
+
+      {/* SECTION 2: North Star */}
+      <Link to="/northstar" className="block">
+        <Card className="p-6 bg-muted/30 cursor-pointer transition-colors hover:bg-muted/50">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            North Star Thesis
+          </span>
+          {thesis ? (
+            <p className="font-serif text-base leading-relaxed mt-2 line-clamp-4">
+              {thesis.content}
+            </p>
+          ) : (
+            <p className="text-muted-foreground text-sm mt-2">
+              No thesis defined yet. Tap to create one.
+            </p>
+          )}
+        </Card>
+      </Link>
+
+      {/* SECTION 3: Quick Access */}
+      <div className="grid grid-cols-2 gap-3">
+        {quickAccessItems.map((item, index) => {
+          const Icon = item.icon
+          const isLastItem = index === quickAccessItems.length - 1
+          return (
             <Link
               key={item.path}
               to={item.path}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '0.75rem',
-                backgroundColor: '#f9fafb',
-                borderRadius: '0.375rem',
-                textDecoration: 'none',
-                color: '#374151',
-              }}
+              className={cn(
+                "flex flex-col items-center justify-center h-24 rounded-md p-3 md:p-4",
+                "bg-zinc-50 dark:bg-zinc-800/50",
+                "transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-700/50",
+                "text-center",
+                isLastItem && "col-span-2"
+              )}
             >
-              <span style={{ fontWeight: '500' }}>{item.label}</span>
-              <span style={{ color: '#9ca3af' }}>&rarr;</span>
+              <Icon className="size-6 text-zinc-500 dark:text-zinc-400 mb-2" />
+              <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{item.label}</span>
             </Link>
-          ))}
-        </div>
-      </Card>
-    </>
+          )
+        })}
+      </div>
+    </div>
   )
 }
