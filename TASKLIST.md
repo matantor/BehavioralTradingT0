@@ -137,7 +137,7 @@ These must NOT exist anywhere in the journal.
 
 ### Implementation Status
 - **Domain / Services / Tests**: ✅ DONE
-- **UI (Portfolio.tsx, PositionDetail.tsx)**: NOT STARTED
+- **UI (Portfolio.tsx, PositionDetail.tsx)**: ✅ DONE
 
 **Next session**: implement Portfolio UI only. Domain logic is complete and must not change.
 
@@ -150,7 +150,7 @@ These must NOT exist anywhere in the journal.
 
 ---
 
-### 2.2 Position lifecycle (LOCKED)
+### 2.2 Position lifecycle (LOCKED) ✅ DONE
 
 - Position is **open** if quantity ≠ 0
 - Position is **closed** if quantity = 0
@@ -161,7 +161,7 @@ These must NOT exist anywhere in the journal.
 
 ---
 
-### 2.3 Spot accounting (LOCKED)
+### 2.3 Spot accounting (LOCKED) ✅ DONE
 
 - Buy → quantity increases
 - Sell → quantity decreases
@@ -176,7 +176,7 @@ These must NOT exist anywhere in the journal.
 
 ---
 
-### 2.4 P&L (LOCKED)
+### 2.4 P&L (LOCKED) ✅ DONE
 
 **Types**
 - Realized P&L
@@ -199,7 +199,7 @@ These must NOT exist anywhere in the journal.
 
 ---
 
-### 2.5 Current price source
+### 2.5 Current price source ✅ DONE
 
 - Current price is **manual** for now
 - API-based pricing is explicitly deferred

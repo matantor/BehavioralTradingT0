@@ -1704,3 +1704,19 @@ Status:
 
 Next step:
 - Part 2 (Portfolio) or Part 3 (Dashboard)
+
+---
+
+## 2026-01-28 — Session 25 (Part 2 Portfolio UI Complete)
+Goal:
+- Complete PART 2 Portfolio UI wiring
+
+Work completed:
+- Portfolio list uses open positions by default with a show-closed toggle
+- Manual currentPrice input wired to PortfolioService.setCurrentPrice
+- Per-position P&L (realized/unrealized/combined) with leveraged = N/A
+- Portfolio totals and P&L view toggle (combined/realized/unrealized)
+- PositionDetail shows qty/avgCost read-only, adds currentPrice input and P&L breakdown
+
+Verification:
+- npm run verify: PASS (lint, typecheck, test, build)

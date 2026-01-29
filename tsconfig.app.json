@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@/domain/*": ["./src/domain/*"],
+      "@/ui/*": ["./src/ui/*"],
+      "@/lib/*": ["./src/lib/*"]
+    }
+  },
+  "include": ["src"]
+}
