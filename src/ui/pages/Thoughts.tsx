@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
-import Card from '../components/Card'
+import { Card } from '@/components/ui/card'
 import ContextSelector from '../components/ContextSelector'
 import { ThoughtService, RelationService, getThoughtKind } from '@/domain/services'
 import type { Thought, ContextAnchor } from '@/domain/types/entities'
+import { cn } from '@/lib/utils'
 
 type FilterKind = 'all' | 'thought' | 'mini_thesis'
 
@@ -82,50 +83,32 @@ export default function Thoughts() {
     return text.substring(0, 100) + '...'
   }
 
-  const filterButtonStyle = (active: boolean) => ({
-    padding: '0.375rem 0.75rem',
-    backgroundColor: active ? '#8b5cf6' : '#f3f4f6',
-    color: active ? 'white' : '#4b5563',
-    border: 'none',
-    borderRadius: '1rem',
-    fontSize: '0.8125rem',
-    cursor: 'pointer',
-    fontWeight: active ? '500' : '400',
-  })
-
   return (
     <>
       {header}
 
-      <Card>
-        <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.75rem' }}>
+      <Card className="p-5 md:p-6 mb-4">
+        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-3">
           Capture a Thought
         </h2>
         <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: '0.75rem' }}>
+          <div className="mb-3">
             <textarea
               placeholder="What's on your mind? Capture ideas, observations, or investment hypotheses..."
               value={content}
               onChange={(e) => setContent(e.target.value)}
               rows={4}
-              style={{
-                width: '100%',
-                padding: '0.5rem',
-                border: '1px solid #d1d5db',
-                borderRadius: '0.25rem',
-                fontSize: '1rem',
-                resize: 'vertical',
-                boxSizing: 'border-box',
-              }}
+              className="w-full p-2 border border-zinc-300 dark:border-zinc-600 rounded text-base bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 resize-y"
             />
           </div>
 
-          <div style={{ marginBottom: '0.75rem' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', color: '#4b5563', cursor: 'pointer' }}>
+          <div className="mb-3">
+            <label className="flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-400 cursor-pointer">
               <input
                 type="checkbox"
                 checked={showContext}
                 onChange={(e) => setShowContext(e.target.checked)}
+                className="rounded"
               />
               Add context (positions, thesis)
             </label>
@@ -143,59 +126,68 @@ export default function Thoughts() {
 
           <button
             type="submit"
-            style={{
-              padding: '0.5rem 1rem',
-              backgroundColor: '#3b82f6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '0.25rem',
-              fontSize: '1rem',
-              cursor: 'pointer',
-              marginTop: showContext ? '0.5rem' : '0',
-            }}
+            className={cn(
+              "px-4 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded text-base cursor-pointer hover:bg-zinc-800 dark:hover:bg-zinc-200",
+              showContext && "mt-2"
+            )}
           >
             Add Thought
           </button>
         </form>
       </Card>
 
-      <Card>
+      <Card className="p-5 md:p-6">
         {/* Filter chips */}
-        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+        <div className="flex gap-2 mb-3 flex-wrap">
           <button
             onClick={() => setFilter('all')}
-            style={filterButtonStyle(filter === 'all')}
+            className={cn(
+              "px-3 py-1.5 rounded-full text-[13px] cursor-pointer",
+              filter === 'all'
+                ? "bg-violet-500 text-white font-medium"
+                : "bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-600"
+            )}
           >
             All ({thoughts.length})
           </button>
           <button
             onClick={() => setFilter('thought')}
-            style={filterButtonStyle(filter === 'thought')}
+            className={cn(
+              "px-3 py-1.5 rounded-full text-[13px] cursor-pointer",
+              filter === 'thought'
+                ? "bg-violet-500 text-white font-medium"
+                : "bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-600"
+            )}
           >
             Thoughts ({thoughtCount})
           </button>
           <button
             onClick={() => setFilter('mini_thesis')}
-            style={filterButtonStyle(filter === 'mini_thesis')}
+            className={cn(
+              "px-3 py-1.5 rounded-full text-[13px] cursor-pointer",
+              filter === 'mini_thesis'
+                ? "bg-violet-500 text-white font-medium"
+                : "bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-600"
+            )}
           >
             Mini-theses ({miniThesisCount})
           </button>
         </div>
 
-        <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
           {filter === 'all' && `All (${filteredThoughts.length})`}
           {filter === 'thought' && `Thoughts (${filteredThoughts.length})`}
           {filter === 'mini_thesis' && `Mini-theses (${filteredThoughts.length})`}
         </h2>
 
         {filteredThoughts.length === 0 ? (
-          <p style={{ color: '#6b7280' }}>
+          <p className="text-zinc-500 dark:text-zinc-400">
             {filter === 'all' && 'No thoughts yet. Capture your first thought above.'}
             {filter === 'thought' && 'No regular thoughts. All thoughts have been promoted to mini-theses.'}
             {filter === 'mini_thesis' && 'No mini-theses yet. Promote a thought to create one.'}
           </p>
         ) : (
-          <div>
+          <div className="space-y-2">
             {filteredThoughts.map((thought) => {
               const kind = getThoughtKind(thought)
               const isMiniThesis = kind === 'mini_thesis'
@@ -204,38 +196,28 @@ export default function Thoughts() {
                 <Link
                   key={thought.id}
                   to={`/thoughts/${thought.id}`}
-                  style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+                  className="block no-underline"
                 >
                   <div
-                    style={{
-                      padding: '0.75rem',
-                      marginBottom: '0.5rem',
-                      backgroundColor: isMiniThesis ? '#faf5ff' : '#f9fafb',
-                      borderRadius: '0.25rem',
-                      borderLeft: isMiniThesis ? '3px solid #a855f7' : '3px solid #8b5cf6',
-                    }}
+                    className={cn(
+                      "p-3 rounded border-l-[3px]",
+                      isMiniThesis
+                        ? "bg-purple-50 dark:bg-purple-900/20 border-l-purple-400"
+                        : "bg-zinc-50 dark:bg-zinc-800/50 border-l-violet-500",
+                      "hover:bg-zinc-100 dark:hover:bg-zinc-700/50"
+                    )}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.25rem' }}>
-                      <p style={{ color: '#374151', fontSize: '0.9375rem', flex: 1, marginRight: '0.5rem' }}>
+                    <div className="flex justify-between items-start gap-2 mb-1">
+                      <p className="text-[15px] text-zinc-700 dark:text-zinc-300 flex-1">
                         {preview(thought.content)}
                       </p>
                       {isMiniThesis && (
-                        <span
-                          style={{
-                            padding: '0.125rem 0.5rem',
-                            backgroundColor: '#a855f7',
-                            color: 'white',
-                            borderRadius: '0.25rem',
-                            fontSize: '0.6875rem',
-                            fontWeight: '600',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
+                        <span className="px-2 py-0.5 bg-purple-400 dark:bg-purple-600 text-white rounded text-[11px] font-semibold whitespace-nowrap">
                           THESIS
                         </span>
                       )}
                     </div>
-                    <p style={{ color: '#9ca3af', fontSize: '0.75rem' }}>
+                    <p className="text-xs text-zinc-400 dark:text-zinc-500">
                       {new Date(thought.createdAt).toLocaleString()}
                     </p>
                   </div>
