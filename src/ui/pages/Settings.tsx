@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
-import Card from '../components/Card'
+import { Card } from '@/components/ui/card'
 import { resetData } from '@/lib/storage/storage'
+import { cn } from '@/lib/utils'
 
 export default function Settings() {
   const navigate = useNavigate()
@@ -12,7 +13,7 @@ export default function Settings() {
     const confirmed = window.confirm(
       'Are you sure you want to reset all data? This will permanently delete all your positions, journal entries, thoughts, and settings.'
     )
-    
+
     if (confirmed) {
       setIsResetting(true)
       resetData()
@@ -25,56 +26,53 @@ export default function Settings() {
   return (
     <>
       {header}
-      <Card>
-        <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+      <Card className="p-5 md:p-6 mb-4">
+        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
           Data Management
         </h2>
         <button
           onClick={handleReset}
           disabled={isResetting}
-          style={{
-            padding: '0.5rem 1rem',
-            backgroundColor: isResetting ? '#9ca3af' : '#ef4444',
-            color: 'white',
-            border: 'none',
-            borderRadius: '0.375rem',
-            cursor: isResetting ? 'not-allowed' : 'pointer',
-            fontSize: '0.875rem'
-          }}
+          className={cn(
+            "px-4 py-2 rounded-md text-sm text-white",
+            isResetting
+              ? "bg-zinc-400 dark:bg-zinc-600 cursor-not-allowed"
+              : "bg-red-500 dark:bg-red-600 cursor-pointer hover:bg-red-600 dark:hover:bg-red-700"
+          )}
         >
           {isResetting ? 'Resetting...' : 'Reset All Data'}
         </button>
-        <p style={{ marginTop: '0.5rem', color: '#ef4444', fontSize: '0.875rem' }}>
+        <p className="mt-2 text-red-500 dark:text-red-400 text-sm">
           Warning: This will permanently delete all your data.
         </p>
       </Card>
 
-      <Card>
-        <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+      <Card className="p-5 md:p-6 mb-4">
+        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
           Export Data
         </h2>
-        <p style={{ color: '#6b7280' }}>
+        <p className="text-zinc-500 dark:text-zinc-400">
           [Placeholder] Export your data to JSON will appear here.
         </p>
       </Card>
 
-      <Card>
-        <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+      <Card className="p-5 md:p-6 mb-4">
+        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
           Preferences
         </h2>
-        <p style={{ color: '#6b7280' }}>
+        <p className="text-zinc-500 dark:text-zinc-400">
           [Placeholder] App preferences and settings will appear here.
         </p>
       </Card>
 
-      <Card>
-        <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+      <Card className="p-5 md:p-6">
+        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
           About
         </h2>
-        <p style={{ color: '#6b7280' }}>
+        <p className="text-zinc-500 dark:text-zinc-400">
           Behavioral Trading Companion v0.1.0
         </p>
-        </Card>
+      </Card>
     </>
   )
 }

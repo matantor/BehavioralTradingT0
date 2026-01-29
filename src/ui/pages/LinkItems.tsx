@@ -1,5 +1,5 @@
 import PageHeader from '../components/PageHeader'
-import Card from '../components/Card'
+import { Card } from '@/components/ui/card'
 
 export default function LinkItems() {
   const header = <PageHeader title="Link Items" />
@@ -7,14 +7,14 @@ export default function LinkItems() {
   return (
     <>
       {header}
-      <Card>
-        <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+      <Card className="p-5 md:p-6 mb-4">
+        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
           Create Relationship
         </h2>
-        <p style={{ color: '#6b7280' }}>
+        <p className="text-zinc-500 dark:text-zinc-400">
           [Placeholder] Link items form will appear here.
         </p>
-        <ul style={{ marginTop: '0.5rem', paddingLeft: '1.5rem', color: '#6b7280' }}>
+        <ul className="mt-2 pl-6 list-disc text-zinc-500 dark:text-zinc-400">
           <li>Select source item</li>
           <li>Select target item</li>
           <li>Choose relationship type</li>
@@ -22,11 +22,11 @@ export default function LinkItems() {
         </ul>
       </Card>
 
-      <Card>
-        <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+      <Card className="p-5 md:p-6 mb-4">
+        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
           Relationship Types
         </h2>
-        <div style={{ color: '#6b7280' }}>
+        <div className="text-zinc-500 dark:text-zinc-400">
           <p>• Related</p>
           <p>• Supports</p>
           <p>• Contradicts</p>
@@ -34,14 +34,14 @@ export default function LinkItems() {
         </div>
       </Card>
 
-      <Card>
-        <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+      <Card className="p-5 md:p-6">
+        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
           Existing Relationships
         </h2>
-        <p style={{ color: '#6b7280' }}>
+        <p className="text-zinc-500 dark:text-zinc-400">
           [Placeholder] Your current item relationships will appear here.
         </p>
-        </Card>
+      </Card>
     </>
   )
 }
