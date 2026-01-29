@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
-import Card from '../components/Card'
+import { Card } from '@/components/ui/card'
 import LinkedItems from '../components/LinkedItems'
 import { NorthStarService } from '@/domain/services'
 import type { ThesisVersion } from '@/domain/types/entities'
@@ -34,14 +34,7 @@ export default function NorthStarVersionDetail() {
       actionButton={
         <Link
           to="/northstar/history"
-          style={{
-            padding: '0.5rem 1rem',
-            backgroundColor: '#e5e7eb',
-            color: '#374151',
-            borderRadius: '0.25rem',
-            textDecoration: 'none',
-            fontSize: '0.875rem',
-          }}
+          className="px-4 py-2 bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded text-sm no-underline hover:bg-zinc-300 dark:hover:bg-zinc-600"
         >
           Back
         </Link>
@@ -53,11 +46,11 @@ export default function NorthStarVersionDetail() {
     return (
       <>
         {header}
-        <Card>
-          <p style={{ color: '#6b7280' }}>Version not found.</p>
+        <Card className="p-5 md:p-6">
+          <p className="text-zinc-500 dark:text-zinc-400">Version not found.</p>
           <Link
             to="/northstar/history"
-            style={{ color: '#3b82f6', textDecoration: 'none', marginTop: '0.5rem', display: 'inline-block' }}
+            className="text-blue-600 dark:text-blue-400 no-underline mt-2 inline-block hover:text-blue-700 dark:hover:text-blue-300"
           >
             &larr; Back to History
           </Link>
@@ -71,75 +64,60 @@ export default function NorthStarVersionDetail() {
       {header}
 
       {isCurrent && (
-        <Card>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            padding: '0.5rem',
-            backgroundColor: '#eff6ff',
-            borderRadius: '0.375rem',
-            border: '1px solid #bfdbfe',
-          }}>
-            <span style={{
-              padding: '0.125rem 0.5rem',
-              backgroundColor: '#3b82f6',
-              color: 'white',
-              borderRadius: '0.25rem',
-              fontSize: '0.75rem',
-              fontWeight: '600',
-            }}>
+        <Card className="p-5 md:p-6 mb-4">
+          <div className="flex items-center gap-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-md border border-blue-200 dark:border-blue-800">
+            <span className="px-2 py-0.5 bg-blue-500 text-white rounded text-xs font-semibold">
               CURRENT
             </span>
-            <span style={{ fontSize: '0.875rem', color: '#1e40af' }}>
+            <span className="text-sm text-blue-800 dark:text-blue-300">
               This is your active thesis.
             </span>
           </div>
         </Card>
       )}
 
-      <Card>
-        <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.75rem' }}>
+      <Card className="p-5 md:p-6 mb-4">
+        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-3">
           Thesis Content
         </h2>
-        <p style={{ color: '#1f2937', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
+        <p className="text-zinc-800 dark:text-zinc-200 leading-relaxed whitespace-pre-wrap font-serif">
           {version.content}
         </p>
       </Card>
 
       {version.changeNote && (
-        <Card>
-          <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+        <Card className="p-5 md:p-6 mb-4">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
             Change Note
           </h2>
-          <p style={{ color: '#4b5563', fontStyle: 'italic' }}>
+          <p className="text-zinc-600 dark:text-zinc-400 italic">
             {version.changeNote}
           </p>
         </Card>
       )}
 
-      <Card>
-        <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.75rem' }}>
+      <Card className="p-5 md:p-6 mb-4">
+        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-3">
           Metadata
         </h2>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>Created</span>
-            <span style={{ color: '#374151', fontSize: '0.875rem' }}>
+        <div className="flex flex-col gap-2">
+          <div className="flex justify-between">
+            <span className="text-zinc-500 dark:text-zinc-400 text-sm">Created</span>
+            <span className="text-zinc-700 dark:text-zinc-300 text-sm">
               {new Date(version.createdAt).toLocaleString()}
             </span>
           </div>
           {version.updatedAt && version.updatedAt !== version.createdAt && (
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>Updated</span>
-              <span style={{ color: '#374151', fontSize: '0.875rem' }}>
+            <div className="flex justify-between">
+              <span className="text-zinc-500 dark:text-zinc-400 text-sm">Updated</span>
+              <span className="text-zinc-700 dark:text-zinc-300 text-sm">
                 {new Date(version.updatedAt).toLocaleString()}
               </span>
             </div>
           )}
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>Version ID</span>
-            <span style={{ color: '#9ca3af', fontSize: '0.75rem', fontFamily: 'monospace' }}>
+          <div className="flex justify-between">
+            <span className="text-zinc-500 dark:text-zinc-400 text-sm">Version ID</span>
+            <span className="text-zinc-400 dark:text-zinc-500 text-xs font-mono">
               {version.id.substring(0, 8)}...
             </span>
           </div>
@@ -149,19 +127,10 @@ export default function NorthStarVersionDetail() {
       {/* Linked Items from RelationEdges */}
       {id && <LinkedItems entityRef={{ type: 'thesis', id }} />}
 
-      <Card>
+      <Card className="p-5 md:p-6">
         <Link
           to="/northstar/history"
-          style={{
-            display: 'block',
-            padding: '0.75rem',
-            backgroundColor: '#f9fafb',
-            borderRadius: '0.375rem',
-            textDecoration: 'none',
-            color: '#374151',
-            textAlign: 'center',
-            fontWeight: '500',
-          }}
+          className="block p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-md no-underline text-zinc-700 dark:text-zinc-300 text-center font-medium hover:bg-zinc-100 dark:hover:bg-zinc-700/50"
         >
           &larr; Back to History
         </Link>
