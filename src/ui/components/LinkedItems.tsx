@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { RelationService, PortfolioService, JournalService, ThoughtService, NorthStarService, getThoughtKind } from '@/domain/services'
 import type { EntityRef, RelationEdge } from '@/domain/types/entities'
-import Card from './Card'
+import { Card } from '@/components/ui/card'
 
 interface LinkedItemsProps {
   entityRef: EntityRef
@@ -46,22 +46,22 @@ export default function LinkedItems({ entityRef }: LinkedItemsProps) {
 
   if (loading) {
     return (
-      <Card>
-        <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+      <Card className="p-5 md:p-6 mb-4">
+        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
           Linked Items
         </h2>
-        <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>Loading...</p>
+        <p className="text-zinc-400 dark:text-zinc-500 text-sm">Loading...</p>
       </Card>
     )
   }
 
   if (items.length === 0) {
     return (
-      <Card>
-        <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+      <Card className="p-5 md:p-6 mb-4">
+        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
           Linked Items
         </h2>
-        <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
+        <p className="text-zinc-500 dark:text-zinc-400 text-sm">
           No linked items. Add context when creating entries to see connections here.
         </p>
       </Card>
@@ -69,44 +69,30 @@ export default function LinkedItems({ entityRef }: LinkedItemsProps) {
   }
 
   return (
-    <Card>
-      <h2 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.75rem' }}>
+    <Card className="p-5 md:p-6 mb-4">
+      <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-3">
         Linked Items ({items.length})
       </h2>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+      <div className="flex flex-col gap-2">
         {items.map((item, idx) => (
           <Link
             key={`${item.ref.type}-${item.ref.id}-${idx}`}
             to={item.link}
-            style={{
-              display: 'block',
-              padding: '0.625rem 0.75rem',
-              backgroundColor: '#f9fafb',
-              borderRadius: '0.375rem',
-              textDecoration: 'none',
-              borderLeft: `3px solid ${getTypeColor(item.ref.type)}`,
-            }}
+            className="block px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/50 rounded-md no-underline border-l-[3px] hover:bg-zinc-100 dark:hover:bg-zinc-700/50"
+            style={{ borderLeftColor: getTypeColor(item.ref.type) }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
-              <span style={{
-                fontSize: '0.75rem',
-                color: getTypeColor(item.ref.type),
-                fontWeight: '600',
-                textTransform: 'uppercase',
-              }}>
+            <div className="flex justify-between items-center mb-1">
+              <span
+                className="text-xs font-semibold uppercase"
+                style={{ color: getTypeColor(item.ref.type) }}
+              >
                 {item.label}
               </span>
-              <span style={{
-                fontSize: '0.6875rem',
-                color: '#9ca3af',
-                backgroundColor: '#e5e7eb',
-                padding: '0.125rem 0.375rem',
-                borderRadius: '0.25rem',
-              }}>
+              <span className="text-[11px] text-zinc-400 dark:text-zinc-500 bg-zinc-200 dark:bg-zinc-700 px-1.5 py-0.5 rounded">
                 {item.relationType}
               </span>
             </div>
-            <p style={{ color: '#374151', fontSize: '0.875rem', margin: 0 }}>
+            <p className="text-zinc-700 dark:text-zinc-300 text-sm m-0">
               {item.preview}
             </p>
           </Link>

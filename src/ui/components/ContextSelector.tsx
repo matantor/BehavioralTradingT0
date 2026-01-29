@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react'
 import type { ContextAnchor } from '@/domain/types/entities'
 import { PortfolioService, ThoughtService, NorthStarService, getThoughtKind } from '@/domain/services'
 import type { Position, Thought, ThesisVersion } from '@/domain/types/entities'
+import { cn } from '@/lib/utils'
 
 export interface ContextSelectorProps {
   // Which entity types to show selectors for
@@ -140,100 +141,51 @@ export default function ContextSelector({
     }
   }
 
-  const sectionStyle = {
-    marginBottom: '0.75rem',
-    padding: '0.75rem',
-    backgroundColor: '#f9fafb',
-    borderRadius: '0.375rem',
-    border: '1px solid #e5e7eb',
-  }
-
-  const labelStyle = {
-    fontSize: '0.875rem',
-    fontWeight: '500' as const,
-    color: '#374151',
-    marginBottom: '0.5rem',
-    display: 'block',
-  }
-
-  const chipStyle = (selected: boolean) => ({
-    display: 'inline-block',
-    padding: '0.25rem 0.625rem',
-    margin: '0.125rem',
-    backgroundColor: selected ? '#3b82f6' : '#e5e7eb',
-    color: selected ? 'white' : '#4b5563',
-    borderRadius: '1rem',
-    fontSize: '0.8125rem',
-    cursor: 'pointer',
-    border: 'none',
-  })
-
-  const checkboxLabelStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    fontSize: '0.875rem',
-    color: '#374151',
-    cursor: 'pointer',
-  }
-
   return (
-    <div style={{ marginTop: '0.75rem' }}>
-      <div style={{ fontSize: '0.9375rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
+    <div className="mt-3">
+      <div className="text-[15px] font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
         Context (optional)
       </div>
 
       {/* NorthStar Section - only show if thesis exists (no friction when no thesis) */}
       {showNorthStar && currentThesis && (
-        <div style={sectionStyle}>
-          <span style={labelStyle}>
+        <div className="mb-3 p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-md border border-zinc-200 dark:border-zinc-700">
+          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2 block">
             Investment Thesis
-            {northStarRequired && <span style={{ color: '#ef4444', marginLeft: '0.25rem' }}>*</span>}
+            {northStarRequired && <span className="text-red-500 ml-1">*</span>}
           </span>
 
           <div>
-            <label style={checkboxLabelStyle}>
+            <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300 cursor-pointer">
               <input
                 type="checkbox"
                 checked={linkToThesis}
                 onChange={(e) => handleThesisChange(e.target.checked)}
+                className="rounded"
               />
               Link to current thesis
             </label>
             {linkToThesis && (
-              <div style={{
-                marginTop: '0.5rem',
-                padding: '0.5rem',
-                backgroundColor: '#dbeafe',
-                borderRadius: '0.25rem',
-                fontSize: '0.8125rem',
-                color: '#1e40af',
-              }}>
+              <div className="mt-2 p-2 bg-blue-100 dark:bg-blue-900/30 rounded text-[13px] text-blue-800 dark:text-blue-300">
                 "{currentThesis.content.substring(0, 80)}{currentThesis.content.length > 80 ? '...' : ''}"
               </div>
             )}
             {/* Show "No related thesis" option when thesis exists but not linked */}
             {northStarRequired && !linkToThesis && (
-              <label style={{ ...checkboxLabelStyle, marginTop: '0.5rem' }}>
+              <label className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400 cursor-pointer mt-2">
                 <input
                   type="checkbox"
                   checked={noThesisExplicit}
                   onChange={(e) => handleNoThesisChange(e.target.checked)}
+                  className="rounded"
                 />
-                <span style={{ color: '#6b7280' }}>No related thesis (explicit)</span>
+                No related thesis (explicit)
               </label>
             )}
           </div>
 
           {northStarRequired && !linkToThesis && !noThesisExplicit && (
-            <div style={{
-              marginTop: '0.5rem',
-              padding: '0.5rem',
-              backgroundColor: '#fef3c7',
-              borderRadius: '0.25rem',
-              fontSize: '0.75rem',
-              color: '#92400e',
-            }}>
+            <div className="mt-2 p-2 bg-amber-100 dark:bg-amber-900/30 rounded text-xs text-amber-700 dark:text-amber-300">
               Decision entries require linking to thesis or explicitly marking as unrelated.
             </div>
           )}
@@ -242,15 +194,20 @@ export default function ContextSelector({
 
       {/* Positions Section */}
       {showPositions && positions.length > 0 && (
-        <div style={sectionStyle}>
-          <span style={labelStyle}>Related Positions</span>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+        <div className="mb-3 p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-md border border-zinc-200 dark:border-zinc-700">
+          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2 block">Related Positions</span>
+          <div className="flex flex-wrap gap-1">
             {positions.map(pos => (
               <button
                 key={pos.id}
                 type="button"
                 onClick={() => togglePosition(pos.id)}
-                style={chipStyle(selectedPositions.includes(pos.id))}
+                className={cn(
+                  "px-2.5 py-1 rounded-full text-[13px] cursor-pointer",
+                  selectedPositions.includes(pos.id)
+                    ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                    : "bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-600"
+                )}
               >
                 {pos.ticker}
               </button>
@@ -261,9 +218,9 @@ export default function ContextSelector({
 
       {/* Thoughts Section */}
       {showThoughts && thoughts.length > 0 && (
-        <div style={sectionStyle}>
-          <span style={labelStyle}>Related Thoughts</span>
-          <div style={{ maxHeight: '120px', overflowY: 'auto' }}>
+        <div className="mb-3 p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-md border border-zinc-200 dark:border-zinc-700">
+          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2 block">Related Thoughts</span>
+          <div className="max-h-[120px] overflow-y-auto">
             {thoughts.slice(0, 10).map(thought => {
               const kind = getThoughtKind(thought)
               const preview = thought.content.substring(0, 40) + (thought.content.length > 40 ? '...' : '')
@@ -272,23 +229,15 @@ export default function ContextSelector({
                   key={thought.id}
                   type="button"
                   onClick={() => toggleThought(thought.id)}
-                  style={{
-                    ...chipStyle(selectedThoughts.includes(thought.id)),
-                    display: 'block',
-                    width: '100%',
-                    textAlign: 'left',
-                    marginBottom: '0.25rem',
-                  }}
+                  className={cn(
+                    "block w-full text-left px-2.5 py-1 rounded-full text-[13px] cursor-pointer mb-1",
+                    selectedThoughts.includes(thought.id)
+                      ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                      : "bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-600"
+                  )}
                 >
                   {kind === 'mini_thesis' && (
-                    <span style={{
-                      fontSize: '0.625rem',
-                      backgroundColor: '#a855f7',
-                      color: 'white',
-                      padding: '0.0625rem 0.25rem',
-                      borderRadius: '0.125rem',
-                      marginRight: '0.375rem',
-                    }}>
+                    <span className="text-[10px] bg-purple-500 text-white px-1 py-0.5 rounded-sm mr-1.5">
                       THESIS
                     </span>
                   )}
