@@ -1,0 +1,5 @@
+entryTime,actionType,ticker,quantity,price,paymentAsset,paymentAmount,isNewMoney,sector,confidence,fees,venue,reminders
+2024-01-05T10:15:00Z,deposit,USD,5000,,USD,,true,,,0,,
+2024-01-06T14:30:00Z,buy,AAPL,10,175.25,USD,1752.50,false,Technology,High,1.25,NASDAQ,Review thesis after earnings
+2024-02-01T09:00:00Z,buy,MSFT,5,320.00,USD,1600.00,false,Technology,Medium,0.75,NASDAQ,
+2024-03-01T12:00:00Z,withdraw,USD,300,,USD,,false,,,

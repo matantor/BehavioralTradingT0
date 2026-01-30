@@ -1811,3 +1811,20 @@ Notes:
 - Trades are immutable; corrections reverse + reapply
 - Position metadata is editable separately
 - Yahoo is unreliable due to rate limits; Alpha Vantage added as fallback
+
+---
+
+## 2026-01-30 — Session 28 (Journal Import CLI)
+Work completed:
+- Added CLI import script for journal entries with dry-run and dedupe
+- Added example CSV/JSON import files
+- Added npm script for import
+
+How to run:
+- npm run import:journal -- --file data/import/journal.csv --dry-run
+- npm run import:journal -- --file data/import/journal.csv
+- npm run import:journal -- --file data/import/journal.json --dry-run
+
+Safety notes:
+- Dry-run validates and previews without writing
+- Dedupe map stored in localStorage key bt_import_dedupe_v1

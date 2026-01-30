@@ -1,0 +1,28 @@
+[
+  {
+    "entryTime": "2024-04-01T09:30:00Z",
+    "actionType": "deposit",
+    "ticker": "USD",
+    "quantity": 2000
+  },
+  {
+    "entryTime": "2024-04-02T15:45:00Z",
+    "actionType": "buy",
+    "ticker": "NVDA",
+    "quantity": 3,
+    "price": 680.5,
+    "paymentAsset": "USD",
+    "paymentAmount": 2041.5,
+    "isNewMoney": false,
+    "sector": "Technology",
+    "rationale": "Starter position",
+    "fees": 0.5,
+    "venue": "NASDAQ"
+  },
+  {
+    "entryTime": "2024-04-05T11:15:00Z",
+    "actionType": "withdraw",
+    "ticker": "USD",
+    "quantity": 250
+  }
+]
