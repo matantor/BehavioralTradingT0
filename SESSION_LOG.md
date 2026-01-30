@@ -1828,3 +1828,72 @@ How to run:
 Safety notes:
 - Dry-run validates and previews without writing
 - Dedupe map stored in localStorage key bt_import_dedupe_v1
+
+---
+
+## 2026-01-30 — Session 29 (Browser Import Page + Data Fix)
+Goal:
+- Fix journal import pipeline so data can be imported into browser app
+
+Problems diagnosed:
+1. CLI writes to file-backed localStorage shim, not browser localStorage
+2. Import data had 28 failing rows (26 SELL + 2 WITHDRAW with positionMode: "new" but no positionId)
+3. Position identity should be ticker-based for imports (auto-resolve by ticker)
+
+Work completed:
+
+CLI schema adapter (scripts/import-journal.ts):
+- Added extractPayment() helper for nested/flat payment formats
+- Modified normalizeRecord() to accept pricePerUnit as alias for price
+
+Browser import page (NEW):
+- Created src/ui/pages/DevImport.tsx with:
+  - JSON file upload and parsing
+  - Record validation with preview (valid/error counts)
+  - Dry-run checkbox for safe previews
+  - Deduplication via hash (bt_import_dedupe_v1_browser)
+  - Auto-resolution of SELL/SHORT by ticker (no explicit positionId needed)
+  - "Sell before buy" error protection
+  - Import progress tracking
+- Added route /dev/import to src/App.tsx
+- Added DEV-only link in Settings.tsx
+
+Data fix scripts (NEW):
+- Created scripts/analyze-import.cjs to identify failing rows
+- Created scripts/fix-import.cjs to fix JSON:
+  - Removes positionMode from SELL/SHORT/WITHDRAW/DEPOSIT rows
+  - Normalizes tickers to uppercase
+  - Sorts chronologically by entryTime
+
+Data fixed:
+- journal.json updated directly with fixes applied
+- Removed journal.fixed.json (no longer needed)
+
+Files created: 3
+- src/ui/pages/DevImport.tsx
+- scripts/analyze-import.cjs
+- scripts/fix-import.cjs
+
+Files modified: 4
+- scripts/import-journal.ts (schema adapter)
+- src/App.tsx (added /dev/import route)
+- src/ui/pages/Settings.tsx (DEV link)
+- data/import/journal.json (data fixes applied)
+
+Key implementation details:
+- DevImport uses buildPositionMap() to get existing positions by ticker
+- On SELL/SHORT import, looks up position by ticker and sets positionId automatically
+- Updates positionMap as BUY/LONG entries create new positions
+- Errors if SELL before corresponding BUY for any ticker
+
+How to test:
+1. Go to http://localhost:5173/dev/import (or via Settings → Import Data)
+2. Upload data/import/journal.json
+3. Click Validate → should show all valid, 0 errors
+4. Uncheck "Dry run" → Import
+5. Check Journal/Portfolio for imported data
+
+Status:
+- Journal import pipeline working for browser
+- Data file fixed and ready for import
+- Auto-resolution by ticker functional

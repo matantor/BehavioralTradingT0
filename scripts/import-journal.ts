@@ -346,6 +346,25 @@ function buildDedupeHash(input: JournalCreateInput): string {
   return crypto.createHash('sha256').update(joined).digest('hex')
 }
 
+// Extract payment info from either flat fields or nested payment object
+function extractPayment(raw: RawRecord): { asset?: string; amount?: number; isNewMoney?: boolean } {
+  // Try nested payment object first (user export format)
+  const nestedPayment = raw.payment as { currency?: unknown; amount?: unknown; newMoney?: unknown } | undefined
+  if (nestedPayment && typeof nestedPayment === 'object') {
+    return {
+      asset: toString(nestedPayment.currency),
+      amount: toNumber(nestedPayment.amount),
+      isNewMoney: toBoolean(nestedPayment.newMoney),
+    }
+  }
+  // Fall back to flat fields (original importer format)
+  return {
+    asset: toString(raw.paymentAsset),
+    amount: toNumber(raw.paymentAmount),
+    isNewMoney: toBoolean(raw.isNewMoney),
+  }
+}
+
 function normalizeRecord(raw: RawRecord, sourceIndex: number): NormalizedRecord {
   const actionType = normalizeActionType(raw.actionType)
   const entryTime = parseEntryTime(raw.entryTime)
@@ -361,25 +380,24 @@ function normalizeRecord(raw: RawRecord, sourceIndex: number): NormalizedRecord 
     throw new Error('positionId is required when positionMode is existing')
   }
 
-  let price = toNumber(raw.price)
+  // Accept both "price" and "pricePerUnit" as the price field
+  let price = toNumber(raw.price) ?? toNumber(raw.pricePerUnit)
   if (actionType === 'deposit' || actionType === 'withdraw') {
     price = 1
   } else if (price === undefined || price < 0) {
-    throw new Error('price is required for non-cash actions')
+    throw new Error('price (or pricePerUnit) is required for non-cash actions')
   }
 
   let payment: JournalCreateInput['payment']
   if (actionType === 'buy') {
-    const paymentAsset = toString(raw.paymentAsset)
-    const paymentAmount = toNumber(raw.paymentAmount)
-    if (!paymentAsset || paymentAmount === undefined) {
-      throw new Error('paymentAsset and paymentAmount are required for buy actions')
+    const extracted = extractPayment(raw)
+    if (!extracted.asset || extracted.amount === undefined) {
+      throw new Error('payment info required for buy actions (either nested payment object or flat paymentAsset/paymentAmount)')
     }
-    const isNewMoney = toBoolean(raw.isNewMoney)
     payment = {
-      asset: paymentAsset.toUpperCase(),
-      amount: paymentAmount,
-      isNewMoney: isNewMoney ?? false,
+      asset: extracted.asset.toUpperCase(),
+      amount: extracted.amount,
+      isNewMoney: extracted.isNewMoney ?? false,
     }
   }
 

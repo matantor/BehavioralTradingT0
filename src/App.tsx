@@ -17,6 +17,7 @@ import LinkItems from './ui/pages/LinkItems'
 import Analytics from './ui/pages/Analytics'
 import Settings from './ui/pages/Settings'
 import About from './ui/pages/About'
+import DevImport from './ui/pages/DevImport'
 import AppShell from './ui/components/AppShell'
 import BottomTabs from './ui/components/BottomTabs'
 import { OnboardingService } from '@/domain/services'
@@ -176,6 +177,16 @@ function App() {
           element={
             <TabbedLayout>
               <About />
+            </TabbedLayout>
+          }
+        />
+
+        {/* DEV-only import route */}
+        <Route
+          path="/dev/import"
+          element={
+            <TabbedLayout>
+              <DevImport />
             </TabbedLayout>
           }
         />

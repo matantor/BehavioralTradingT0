@@ -1,9 +1,16 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import { Card } from '@/components/ui/card'
 import { resetData } from '@/lib/storage/storage'
 import { cn } from '@/lib/utils'
+
+// DEV-only: show dev tools when running locally
+const IS_DEV = typeof window !== 'undefined' && (
+  window.location.hostname === 'localhost' ||
+  window.location.hostname === '127.0.0.1' ||
+  window.location.port === '5173'
+)
 
 export default function Settings() {
   const navigate = useNavigate()
@@ -73,6 +80,28 @@ export default function Settings() {
           Behavioral Trading Companion v0.1.0
         </p>
       </Card>
+
+      {/* DEV-only: Import Data tool */}
+      {IS_DEV && (
+        <Card className="p-5 md:p-6 mt-4 border-dashed border-amber-500 dark:border-amber-600">
+          <h2 className="text-lg font-semibold text-amber-700 dark:text-amber-400 mb-2">
+            Developer Tools
+          </h2>
+          <Link
+            to="/dev/import"
+            className={cn(
+              "inline-block px-4 py-2 rounded-md text-sm",
+              "bg-amber-500 dark:bg-amber-600 text-white",
+              "hover:bg-amber-600 dark:hover:bg-amber-700"
+            )}
+          >
+            Import Data (Dev)
+          </Link>
+          <p className="mt-2 text-amber-600 dark:text-amber-500 text-sm">
+            Import journal entries from JSON/CSV. Only visible in development.
+          </p>
+        </Card>
+      )}
     </>
   )
 }
