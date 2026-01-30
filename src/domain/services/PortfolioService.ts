@@ -3,6 +3,7 @@
 // Services call repositories only, no direct storage access
 
 import type { Position } from '@/domain/types/entities'
+import type { RefreshResult } from '@/domain/types/pricing'
 import { PositionRepository } from '@/domain/repositories/PositionRepository'
 import { JournalRepository } from '@/domain/repositories/JournalRepository'
 import { PricingService } from './PricingService'
@@ -27,6 +28,20 @@ export interface HistoricalSnapshot {
   date: string               // ISO8601 date
   portfolioValue: number     // total portfolio value at this point
   cumulativePnL: number      // cumulative P&L up to this point
+}
+
+export interface PortfolioViewPosition {
+  position: Position
+  isLeveraged: boolean
+  pnl: PnLResult
+  marketPriceStatus: { price: number | null; isStale: boolean }
+  effectivePrice: { price: number | null; source: 'manual' | 'market' | 'none'; isStale: boolean }
+}
+
+export interface PortfolioView {
+  positions: PortfolioViewPosition[]
+  totals: PortfolioTotals
+  lastRefreshed: string | null
 }
 
 class PortfolioServiceClass {
@@ -139,6 +154,41 @@ class PortfolioServiceClass {
       return { price: marketStatus.price, source: 'market', isStale: marketStatus.isStale }
     }
     return { price: null, source: 'none', isStale: false }
+  }
+
+  /**
+   * Derived portfolio view model for UI consumption
+   */
+  getPortfolioView(options?: { status?: 'open' | 'closed' | 'all' }): PortfolioView {
+    const status = options?.status ?? 'open'
+    const positions =
+      status === 'closed'
+        ? this.listClosed()
+        : status === 'all'
+          ? this.list()
+          : this.listOpen()
+
+    const viewPositions = positions.map((position) => ({
+      position,
+      isLeveraged: this.isLeveraged(position),
+      pnl: this.getCombinedPnL(position),
+      marketPriceStatus: this.getMarketPriceWithStatus(position),
+      effectivePrice: this.getEffectivePriceWithSource(position),
+    }))
+
+    return {
+      positions: viewPositions,
+      totals: this.getPortfolioTotals(),
+      lastRefreshed: PricingService.getLastRefreshed(),
+    }
+  }
+
+  /**
+   * Refresh market prices for open positions (or provided list)
+   */
+  async refreshMarketPrices(positions?: Position[]): Promise<RefreshResult> {
+    const targets = positions ?? this.listOpen()
+    return PricingService.refreshAll(targets)
   }
 
   /**
