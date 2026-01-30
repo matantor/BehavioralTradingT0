@@ -1897,3 +1897,29 @@ Status:
 - Journal import pipeline working for browser
 - Data file fixed and ready for import
 - Auto-resolution by ticker functional
+
+---
+
+## Two-Pass Import Instructions
+
+The import requires positions to exist before SELL/WITHDRAW actions can reference them.
+Use the split script to separate BUY/DEPOSIT from other actions.
+
+**Commands:**
+
+```bash
+# 1. Split the import file
+node scripts/split-import-by-pass.cjs
+
+# 2. Reset all data (in browser: Settings → Reset All Data)
+
+# 3. Import pass 1 (buy/deposit) via /dev/import
+#    Upload: data/import/journal.pass1.json
+#    Uncheck "Dry run" → Import
+
+# 4. Import pass 2 (sell/withdraw/etc) via /dev/import
+#    Upload: data/import/journal.pass2.json
+#    Uncheck "Dry run" → Import
+```
+
+This ensures positions and cash exist before any sells or withdrawals.

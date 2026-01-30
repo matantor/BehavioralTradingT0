@@ -17,6 +17,12 @@ import { generateUUID, generateTimestamp } from '@/domain/types/entities'
 const STORAGE_KEY = 'behavioral-trading-v1'
 const SCHEMA_VERSION = 3
 
+// Import dedupe key (must match DevImport.tsx)
+const IMPORT_DEDUPE_KEY = 'bt_import_dedupe_v1_browser'
+
+// Exported for debug purposes
+export { STORAGE_KEY, IMPORT_DEDUPE_KEY }
+
 // StorageData: complete application state
 export interface StorageData {
   schemaVersion: number
@@ -155,6 +161,8 @@ export function saveData(data: StorageData): void {
 export function resetData(): void {
   try {
     localStorage.removeItem(STORAGE_KEY)
+    // Also clear import dedupe history so re-imports work after reset
+    localStorage.removeItem(IMPORT_DEDUPE_KEY)
   } catch (error) {
     console.error('Failed to reset data in localStorage:', error)
     throw new Error('Storage reset failed')

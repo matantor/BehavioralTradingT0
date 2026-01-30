@@ -4,6 +4,7 @@
 import { useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { JournalService, PortfolioService, type JournalCreateInput } from '@/domain/services'
+import { loadData, STORAGE_KEY, IMPORT_DEDUPE_KEY } from '@/lib/storage/storage'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -51,7 +52,8 @@ interface ImportResult {
 // Constants
 // ============================================================================
 
-const DEDUPE_KEY = 'bt_import_dedupe_v1_browser'
+// Use the exported constant from storage.ts
+const DEDUPE_KEY = IMPORT_DEDUPE_KEY
 const MAX_ERRORS_DISPLAY = 10
 
 // ============================================================================
@@ -370,6 +372,38 @@ function saveDedupeMap(map: Record<string, { importedAt: string }>): void {
   localStorage.setItem(DEDUPE_KEY, JSON.stringify(map))
 }
 
+function clearDedupeMap(): void {
+  localStorage.removeItem(DEDUPE_KEY)
+}
+
+function getDedupeCount(): number {
+  return Object.keys(getDedupeMap()).length
+}
+
+interface StorageDebugInfo {
+  mainStorageKey: string
+  dedupeStorageKey: string
+  journalCount: number
+  positionCount: number
+  dedupeCount: number
+  mainStorageSize: string
+}
+
+function getStorageDebugInfo(): StorageDebugInfo {
+  const data = loadData()
+  const mainRaw = localStorage.getItem(STORAGE_KEY) || ''
+  const mainSize = new Blob([mainRaw]).size
+
+  return {
+    mainStorageKey: STORAGE_KEY,
+    dedupeStorageKey: DEDUPE_KEY,
+    journalCount: Object.keys(data.journalEntries).length,
+    positionCount: Object.keys(data.positions).length,
+    dedupeCount: getDedupeCount(),
+    mainStorageSize: mainSize > 1024 ? `${(mainSize / 1024).toFixed(1)} KB` : `${mainSize} B`,
+  }
+}
+
 // ============================================================================
 // Validation
 // ============================================================================
@@ -518,7 +552,33 @@ export default function DevImport() {
   const [validation, setValidation] = useState<ValidationResult | null>(null)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [isImporting, setIsImporting] = useState(false)
+  const [debugInfo, setDebugInfo] = useState<StorageDebugInfo | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Refresh debug info
+  const refreshDebugInfo = () => {
+    setDebugInfo(getStorageDebugInfo())
+  }
+
+  // Clear import history
+  const handleClearDedupeHistory = () => {
+    const count = getDedupeCount()
+    if (count === 0) {
+      alert('Import history is already empty.')
+      return
+    }
+    const confirmed = window.confirm(
+      `Clear import history? This will allow re-importing ${count} previously imported entries.`
+    )
+    if (confirmed) {
+      clearDedupeMap()
+      refreshDebugInfo()
+      // Re-run validation if there's input
+      if (inputText.trim()) {
+        setValidation(validateRecords(inputText, isJson))
+      }
+    }
+  }
 
   // DEV-only gate
   if (!IS_DEV) {
@@ -813,6 +873,42 @@ export default function DevImport() {
           </CardContent>
         </Card>
       )}
+
+      {/* Debug Storage Panel */}
+      <Card className="border-dashed border-amber-500">
+        <CardHeader>
+          <CardTitle className="text-amber-700 dark:text-amber-400">Debug Storage</CardTitle>
+          <CardDescription>Inspect localStorage state for debugging import issues.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Button onClick={refreshDebugInfo} variant="outline" size="sm">
+              Refresh Debug Info
+            </Button>
+            <Button onClick={handleClearDedupeHistory} variant="outline" size="sm" className="text-amber-600">
+              Clear Import History
+            </Button>
+          </div>
+
+          {debugInfo && (
+            <div className="grid grid-cols-2 gap-2 text-sm font-mono bg-muted p-3 rounded-md">
+              <div className="text-muted-foreground">Main storage key:</div>
+              <div>{debugInfo.mainStorageKey}</div>
+              <div className="text-muted-foreground">Dedupe storage key:</div>
+              <div>{debugInfo.dedupeStorageKey}</div>
+              <Separator className="col-span-2 my-1" />
+              <div className="text-muted-foreground">Journal entries:</div>
+              <div>{debugInfo.journalCount}</div>
+              <div className="text-muted-foreground">Positions:</div>
+              <div>{debugInfo.positionCount}</div>
+              <div className="text-muted-foreground">Dedupe count:</div>
+              <div>{debugInfo.dedupeCount}</div>
+              <div className="text-muted-foreground">Main storage size:</div>
+              <div>{debugInfo.mainStorageSize}</div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Help */}
       <Card>
