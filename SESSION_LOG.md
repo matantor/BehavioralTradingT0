@@ -1923,3 +1923,48 @@ node scripts/split-import-by-pass.cjs
 ```
 
 This ensures positions and cash exist before any sells or withdrawals.
+
+---
+
+## 2026-01-30 — Session 30 (Import Pipeline: Current State)
+
+### What exists:
+- Dev Import page at `/dev/import` (Settings → Developer Tools → Import Data)
+- Two-pass split script: `scripts/split-import-by-pass.cjs`
+- Dedupe tracking via `bt_import_dedupe_v1_browser` localStorage key
+- Reset All Data now clears both main storage and dedupe key
+
+### What is working:
+- BUY/DEPOSIT imports succeed
+- Positions appear in Portfolio after pass1 import (~119 positions from buys)
+- Dedupe prevents duplicate imports
+- Debug Storage panel shows storage state
+
+### What is NOT working:
+- SELL/WITHDRAW imports fail during pass2 with errors:
+  - `"sell before buy for ticker X (no position found)"`
+  - `"Cannot withdraw Y; only X available"`
+
+### Key question:
+Is this a **data problem** or an **app logic problem**?
+
+---
+
+## Import Failure Diagnostic Checklist
+
+### Data checks:
+- [ ] a) Are SELL timestamps earlier than the first BUY for that ticker?
+- [ ] b) Are tickers normalized consistently (case, spacing, suffixes like BTC vs WBTC)?
+- [ ] c) Do sell quantities exceed total bought quantities for any ticker?
+- [ ] d) Are withdraw amounts exceeding available cash (no initial cash deposit in dataset)?
+- [ ] e) Does the dataset represent an "already-existing portfolio" (sells assume prior holdings not present in the import file)?
+
+### App/logic checks:
+- [ ] a) How does DevImport resolve a SELL to a position? (by positionId? by ticker lookup? by auto mode?)
+- [ ] b) Is positionMode being inferred/forced incorrectly for sell rows?
+- [ ] c) Does JournalService.create require an existing position for sells and fail appropriately?
+
+### Expected diagnosis:
+If data check (e) is true — the dataset is a partial export missing initial holdings — then the app logic is correct but the data is incomplete. The solution would be either:
+1. Add opening balances to the import file, OR
+2. Implement "assisted mode" that auto-seeds positions from first sell
