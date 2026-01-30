@@ -29,3 +29,6 @@ Rules:
 - 2026-01-29: Market price data uses separate localStorage cache (bt_price_cache), distinct from main app storage. Market prices are derived data that never overwrite Position.currentPrice (manual entries).
 - 2026-01-29: Price priority for P&L: manual price always wins. Market price is fallback only when no manual price exists.
 - 2026-01-29: Price providers (Yahoo Finance, CoinGecko) are abstracted behind PriceProvider interface for replaceability. Ticker normalization happens internally (e.g., BTC → bitcoin for CoinGecko).
+- 2026-01-30: Trades are immutable; corrections use reverse + reapply instead of in-place edits.
+- 2026-01-30: Positions are mutable state; editing a position does not edit trade history.
+- 2026-01-30: Free price providers only; Yahoo Finance is primary, Alpha Vantage is fallback, CoinGecko is used for crypto.

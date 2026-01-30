@@ -8,6 +8,8 @@ import type {
   AssetType,
   RefreshResult,
   PriceProvider,
+  ProviderQuote,
+  PriceProviderName,
 } from '@/domain/types/pricing'
 import { CACHE_TTL } from '@/domain/types/pricing'
 import {
@@ -16,19 +18,21 @@ import {
   updateRefreshTimestamp,
   getLastRefreshTime,
   isCacheExpired,
+  removeCachedPrice,
 } from '@/lib/storage/priceCache'
 import { yahooFinanceProvider } from '@/domain/providers/YahooFinanceProvider'
+import { alphaVantageProvider } from '@/domain/providers/AlphaVantageProvider'
 import { coinGeckoProvider } from '@/domain/providers/CoinGeckoProvider'
 
-// Provider registry
-const providers: PriceProvider[] = [
-  yahooFinanceProvider,
-  coinGeckoProvider,
-]
+const ALPHA_VANTAGE_MAX_PER_REFRESH = 5
 
-// Select provider based on asset type
-function selectProvider(assetType: AssetType): PriceProvider | null {
-  return providers.find(p => p.supports(assetType)) ?? null
+function isAlphaEnabled(provider: PriceProvider): boolean {
+  const maybe = provider as PriceProvider & { isEnabled?: () => boolean }
+  return typeof maybe.isEnabled === 'function' ? maybe.isEnabled() : true
+}
+
+function isEquityLike(assetType: AssetType): boolean {
+  return assetType === 'equity' || assetType === 'etf'
 }
 
 // Map Position.assetType to our AssetType (handle undefined)
@@ -89,15 +93,31 @@ class PricingServiceClass {
    * Returns the new cached price or null on failure
    */
   async refreshPrice(ticker: string, assetType: AssetType): Promise<CachedPrice | null> {
-    const provider = selectProvider(assetType)
-    if (!provider) {
-      console.warn(`No provider supports asset type: ${assetType}`)
-      return null
-    }
-
     try {
-      const quote = await provider.fetchQuote(ticker)
-      if (!quote) {
+      let quote: ProviderQuote | null = null
+      let providerName: PriceProviderName | null = null
+
+      if (isEquityLike(assetType)) {
+        try {
+          quote = await yahooFinanceProvider.fetchQuote(ticker)
+          providerName = yahooFinanceProvider.name
+        } catch (error) {
+          if (isAlphaEnabled(alphaVantageProvider)) {
+            quote = await alphaVantageProvider.fetchQuote(ticker)
+            providerName = alphaVantageProvider.name
+          } else {
+            throw error
+          }
+        }
+      } else if (coinGeckoProvider.supports(assetType)) {
+        quote = await coinGeckoProvider.fetchQuote(ticker)
+        providerName = coinGeckoProvider.name
+      } else {
+        console.warn(`No provider supports asset type: ${assetType}`)
+        return null
+      }
+
+      if (!quote || !providerName) {
         return null
       }
 
@@ -110,7 +130,7 @@ class PricingServiceClass {
         assetType,
         price: quote.price,
         currency: quote.currency,
-        provider: provider.name,
+        provider: providerName,
         fetchedAt: now.toISOString(),
         expiresAt: expiresAt.toISOString(),
       }
@@ -163,19 +183,81 @@ class PricingServiceClass {
 
     // Fetch by provider
     for (const [assetType, assetPositions] of byAssetType) {
-      const provider = selectProvider(assetType)
-      if (!provider) {
-        // No provider - mark all as failed
+      const tickers = assetPositions.map(p => p.ticker)
+
+      if (isEquityLike(assetType)) {
+        const newPrices: CachedPrice[] = []
+        let yahooQuotes: Map<string, ProviderQuote> = new Map()
+        let yahooFailed = false
+
+        try {
+          yahooQuotes = await yahooFinanceProvider.fetchQuotes(tickers)
+        } catch (error) {
+          yahooFailed = true
+        }
+
+        const missingPositions = assetPositions.filter(
+          pos => !yahooQuotes.has(pos.ticker.toUpperCase())
+        )
+
+        const alphaQuotes = new Map<string, ProviderQuote>()
+        if (yahooFailed && isAlphaEnabled(alphaVantageProvider) && missingPositions.length > 0) {
+          const capped = missingPositions.slice(0, ALPHA_VANTAGE_MAX_PER_REFRESH)
+          const skipped = missingPositions.slice(ALPHA_VANTAGE_MAX_PER_REFRESH)
+          for (const pos of skipped) {
+            result.skipped.push(pos.ticker)
+          }
+
+          for (const pos of capped) {
+            try {
+              const quote = await alphaVantageProvider.fetchQuote(pos.ticker)
+              if (quote) {
+                alphaQuotes.set(pos.ticker.toUpperCase(), quote)
+              }
+            } catch (error) {
+              // Ignore per-ticker errors; handled below
+            }
+          }
+        }
+
+        for (const pos of assetPositions) {
+          const ticker = pos.ticker.toUpperCase()
+          const yahooQuote = yahooQuotes.get(ticker)
+          const alphaQuote = alphaQuotes.get(ticker)
+          const quote = yahooQuote ?? alphaQuote
+          if (quote) {
+            const ttl = CACHE_TTL[assetType] ?? CACHE_TTL.other
+            const expiresAt = new Date(now.getTime() + ttl)
+            newPrices.push({
+              ticker,
+              assetType,
+              price: quote.price,
+              currency: quote.currency,
+              provider: yahooQuote ? yahooFinanceProvider.name : alphaVantageProvider.name,
+              fetchedAt: now.toISOString(),
+              expiresAt: expiresAt.toISOString(),
+            })
+            result.success.push(pos.ticker)
+          } else if (!result.skipped.includes(pos.ticker)) {
+            result.failed.push(pos.ticker)
+          }
+        }
+
+        if (newPrices.length > 0) {
+          setCachedPrices(newPrices)
+        }
+        continue
+      }
+
+      if (!coinGeckoProvider.supports(assetType)) {
         for (const pos of assetPositions) {
           result.failed.push(pos.ticker)
         }
         continue
       }
 
-      const tickers = assetPositions.map(p => p.ticker)
-
       try {
-        const quotes = await provider.fetchQuotes(tickers)
+        const quotes = await coinGeckoProvider.fetchQuotes(tickers)
         const newPrices: CachedPrice[] = []
 
         for (const pos of assetPositions) {
@@ -189,7 +271,7 @@ class PricingServiceClass {
               assetType,
               price: quote.price,
               currency: quote.currency,
-              provider: provider.name,
+              provider: coinGeckoProvider.name,
               fetchedAt: now.toISOString(),
               expiresAt: expiresAt.toISOString(),
             })
@@ -231,6 +313,13 @@ class PricingServiceClass {
       }
     }
     return false
+  }
+
+  /**
+   * Invalidate cached price for a ticker
+   */
+  invalidatePrice(ticker: string): void {
+    removeCachedPrice(ticker)
   }
 }
 

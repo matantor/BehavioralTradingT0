@@ -13,6 +13,7 @@ export default function PositionDetail() {
   const [isEditing, setIsEditing] = useState(false)
 
   // Edit form state
+  const [ticker, setTicker] = useState('')
   const [name, setName] = useState('')
   const [notes, setNotes] = useState('')
   const [currentPrice, setCurrentPrice] = useState('')
@@ -22,6 +23,7 @@ export default function PositionDetail() {
     const data = PortfolioService.get(id)
     setPosition(data)
     if (data) {
+      setTicker(data.ticker || '')
       setName(data.name || '')
       setNotes(data.notes || '')
       setCurrentPrice(data.currentPrice !== undefined ? data.currentPrice.toString() : '')
@@ -37,6 +39,7 @@ export default function PositionDetail() {
     if (!id || !position) return
 
     PortfolioService.update(id, {
+      ticker,
       name: name.trim() || undefined,
       notes: notes.trim() || undefined,
     })
@@ -122,6 +125,18 @@ export default function PositionDetail() {
 
         {isEditing ? (
           <form onSubmit={handleUpdate}>
+            <div className="mb-2">
+              <label className="block text-sm text-zinc-500 dark:text-zinc-400 mb-1">
+                Ticker
+              </label>
+              <input
+                type="text"
+                value={ticker}
+                onChange={(e) => setTicker(e.target.value)}
+                placeholder="e.g., AAPL"
+                className="w-full p-2 border border-zinc-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
+              />
+            </div>
             <div className="mb-2">
               <label className="block text-sm text-zinc-500 dark:text-zinc-400 mb-1">
                 Name (optional)

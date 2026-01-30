@@ -87,6 +87,7 @@ export interface JournalEntry {
   // meta.fees, meta.venue, meta.status, meta.reminders
 
   archivedAt?: string
+  supersededById?: string
   meta?: Record<string, unknown>
 }
 

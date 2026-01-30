@@ -1721,6 +1721,7 @@ Work completed:
 Verification:
 - npm run verify: PASS (lint, typecheck, test, build)
 
+
 ---
 
 ### UI Refactor Phase — CLOSED
@@ -1777,3 +1778,36 @@ Architecture:
 Verification:
 - npm run build: PASS
 - npm run lint: PASS
+
+---
+
+## 2026-01-30 — Session 27 (Journal Trade Correction)
+Goal:
+- Implement Replace / Correct Trade flow for journal entries
+
+Work completed:
+- Added JournalEntry supersededById support
+- Implemented JournalService.replaceTrade with reverse + apply and relation copy
+- Added inline correction form on JournalDetail and superseded link display
+- Fixed lint in PricingService (prefer-const)
+
+Verification:
+- npm run lint: PASS
+- npm run typecheck: PASS
+- npm run test: PASS (WebSocket server EPERM warning from Vite)
+- npm run build: PASS
+
+---
+
+## 2026-01-30 — Session 27 (UI Refactor, Pricing v1, Trade Corrections)
+Work completed:
+- UI refactor completed (Tailwind + shadcn)
+- Pricing architecture v1 implemented (PricingService, providers, cache)
+- Portfolio integrated with derived view model
+- Market prices integrated (manual wins, cache-based, offline-safe)
+- Trade correction flow added (replace/correct instead of edit)
+
+Notes:
+- Trades are immutable; corrections reverse + reapply
+- Position metadata is editable separately
+- Yahoo is unreliable due to rate limits; Alpha Vantage added as fallback

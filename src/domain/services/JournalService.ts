@@ -254,6 +254,40 @@ class JournalServiceClass {
   }
 
   /**
+   * Replace an existing journal entry with a corrected one.
+   * Reverses the old entry's effects, applies the new entry, and supersedes the original.
+   */
+  replaceTrade(originalId: string, input: JournalCreateInput): JournalCreateResult {
+    const original = JournalRepository.getById(originalId)
+    if (!original) {
+      throw new Error(`Journal entry ${originalId} not found`)
+    }
+    if (original.archivedAt) {
+      throw new Error('Cannot replace an archived journal entry')
+    }
+    if (original.supersededById) {
+      throw new Error('This journal entry has already been superseded')
+    }
+
+    // Undo original portfolio effects
+    this.reverseEntry(original)
+
+    // Apply corrected trade
+    const result = this.create(input)
+
+    // Preserve linked relations from original entry
+    this.copyRelations(original.id, result.journalEntry.id)
+
+    // Mark original as superseded (and archive to hide by default)
+    JournalRepository.update(original.id, {
+      archivedAt: generateTimestamp(),
+      supersededById: result.journalEntry.id,
+    })
+
+    return result
+  }
+
+  /**
    * Get or create the USD cash position
    */
   private getOrCreateCashPosition(): Position {
@@ -289,6 +323,133 @@ class JournalServiceClass {
     }
 
     return deductAmount
+  }
+
+  /**
+   * Reverse the portfolio effects of a journal entry.
+   * Uses inverse math based on the current position state.
+   */
+  private reverseEntry(entry: JournalEntry): void {
+    const positionId = entry.positionId
+    if (!positionId) {
+      throw new Error('Journal entry has no positionId to reverse')
+    }
+
+    const position = PositionRepository.getById(positionId)
+    if (!position) {
+      throw new Error(`Position ${positionId} not found for reversal`)
+    }
+
+    switch (entry.actionType) {
+      case 'buy': {
+        const newQuantity = position.quantity - entry.quantity
+        if (newQuantity < 0) {
+          throw new Error('Cannot reverse buy; position quantity would go negative')
+        }
+        const updates: Partial<Position> = {
+          quantity: newQuantity,
+          closedAt: newQuantity === 0 ? entry.entryTime : undefined,
+        }
+        if (newQuantity > 0) {
+          const previousTotalCost = position.quantity * position.avgCost - entry.quantity * entry.price
+          const newAvgCost = previousTotalCost / newQuantity
+          if (Number.isFinite(newAvgCost) && newAvgCost >= 0) {
+            updates.avgCost = newAvgCost
+          }
+        }
+        PositionRepository.update(position.id, updates)
+
+        // Restore cash if it was deducted for this buy
+        if (entry.payment && !entry.payment.isNewMoney && entry.payment.asset === 'USD') {
+          const cashPosition = this.getOrCreateCashPosition()
+          PositionRepository.update(cashPosition.id, {
+            quantity: cashPosition.quantity + entry.payment.amount,
+          })
+        }
+        break
+      }
+
+      case 'sell': {
+        const newQuantity = position.quantity + entry.quantity
+        PositionRepository.update(position.id, {
+          quantity: newQuantity,
+          closedAt: newQuantity > 0 ? undefined : position.closedAt,
+        })
+        break
+      }
+
+      case 'deposit': {
+        if (entry.quantity > position.quantity) {
+          throw new Error('Cannot reverse deposit; cash would go negative')
+        }
+        PositionRepository.update(position.id, {
+          quantity: position.quantity - entry.quantity,
+        })
+        break
+      }
+
+      case 'withdraw': {
+        PositionRepository.update(position.id, {
+          quantity: position.quantity + entry.quantity,
+        })
+        break
+      }
+
+      case 'long':
+      case 'short': {
+        const newQuantity = position.quantity - entry.quantity
+        if (newQuantity < 0) {
+          throw new Error('Cannot reverse leveraged entry; position quantity would go negative')
+        }
+        PositionRepository.update(position.id, {
+          quantity: newQuantity,
+          closedAt: newQuantity === 0 ? entry.entryTime : undefined,
+        })
+        break
+      }
+
+      default:
+        throw new Error(`Unknown action type: ${entry.actionType}`)
+    }
+  }
+
+  /**
+   * Copy relations from an original journal entry to its replacement.
+   * Skips auto-derived journal→position relations.
+   */
+  private copyRelations(originalId: string, replacementId: string): void {
+    const originalRef: EntityRef = { type: 'journal', id: originalId }
+    const replacementRef: EntityRef = { type: 'journal', id: replacementId }
+    const relations = RelationRepository.listForEntity(originalRef, false)
+
+    for (const relation of relations) {
+      const derivedFrom = relation.meta && typeof relation.meta === 'object'
+        ? (relation.meta as Record<string, unknown>).derivedFrom
+        : undefined
+      const involvesPosition =
+        relation.fromRef.type === 'position' || relation.toRef.type === 'position'
+
+      if (
+        involvesPosition &&
+        (derivedFrom === 'journalEntry' || derivedFrom === 'portfolioAction')
+      ) {
+        continue
+      }
+
+      const fromRef =
+        relation.fromRef.type === 'journal' && relation.fromRef.id === originalId
+          ? replacementRef
+          : relation.fromRef
+      const toRef =
+        relation.toRef.type === 'journal' && relation.toRef.id === originalId
+          ? replacementRef
+          : relation.toRef
+
+      const existing = RelationRepository.findExisting(fromRef, toRef, relation.relationType)
+      if (!existing) {
+        RelationRepository.create(fromRef, toRef, relation.relationType, relation.meta)
+      }
+    }
   }
 
   /**

@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import { Card } from '@/components/ui/card'
-import { PortfolioService, PricingService } from '@/domain/services'
-import type { Position } from '@/domain/types/entities'
+import { PortfolioService } from '@/domain/services'
+import type { PortfolioViewPosition } from '@/domain/services/PortfolioService'
 import type { RefreshResult } from '@/domain/types/pricing'
 import { cn } from '@/lib/utils'
 
@@ -11,25 +11,26 @@ type PnLView = 'combined' | 'realized' | 'unrealized'
 type RefreshStatus = 'idle' | 'loading' | 'success' | 'error'
 
 export default function Portfolio() {
-  const [positions, setPositions] = useState<Position[]>([])
+  const [positions, setPositions] = useState<PortfolioViewPosition[]>([])
   const [showClosed, setShowClosed] = useState(false)
   const [pnlView, setPnlView] = useState<PnLView>('combined')
   const [currentPrices, setCurrentPrices] = useState<Record<string, string>>({})
   const [totals, setTotals] = useState(PortfolioService.getPortfolioTotals())
   const [refreshStatus, setRefreshStatus] = useState<RefreshStatus>('idle')
-  const [lastRefreshed, setLastRefreshed] = useState<string | null>(PricingService.getLastRefreshed())
+  const [lastRefreshed, setLastRefreshed] = useState<string | null>(PortfolioService.getPortfolioView().lastRefreshed)
   const [refreshResult, setRefreshResult] = useState<RefreshResult | null>(null)
 
   const loadPositions = useCallback(() => {
-    const data = showClosed ? PortfolioService.listClosed() : PortfolioService.listOpen()
-    setPositions(data)
-    setTotals(PortfolioService.getPortfolioTotals())
+    const view = PortfolioService.getPortfolioView({ status: showClosed ? 'closed' : 'open' })
+    setPositions(view.positions)
+    setTotals(view.totals)
+    setLastRefreshed(view.lastRefreshed)
 
     setCurrentPrices((prev) => {
       const next: Record<string, string> = { ...prev }
-      for (const position of data) {
-        if (next[position.id] === undefined) {
-          next[position.id] = position.currentPrice !== undefined ? position.currentPrice.toString() : ''
+      for (const item of view.positions) {
+        if (next[item.position.id] === undefined) {
+          next[item.position.id] = item.position.currentPrice !== undefined ? item.position.currentPrice.toString() : ''
         }
       }
       return next
@@ -61,11 +62,9 @@ export default function Portfolio() {
 
     try {
       // Only refresh open positions
-      const openPositions = PortfolioService.listOpen()
-      const result = await PricingService.refreshAll(openPositions)
+      const result = await PortfolioService.refreshMarketPrices()
 
       setRefreshResult(result)
-      setLastRefreshed(PricingService.getLastRefreshed())
 
       if (result.failed.length > 0 && result.success.length === 0) {
         setRefreshStatus('error')
@@ -88,17 +87,9 @@ export default function Portfolio() {
     }
   }
 
-  const formatRelativeTime = (isoString: string): string => {
+  const formatTimestamp = (isoString: string): string => {
     const date = new Date(isoString)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-
-    if (diffMins < 1) return 'just now'
-    if (diffMins < 60) return `${diffMins}m ago`
-    const diffHours = Math.floor(diffMins / 60)
-    if (diffHours < 24) return `${diffHours}h ago`
-    return date.toLocaleDateString()
+    return date.toLocaleString()
   }
 
   const header = <PageHeader title="Portfolio" />
@@ -133,7 +124,7 @@ export default function Portfolio() {
               Open positions: {totals.positionCount}
             </p>
           </div>
-          <div className="flex gap-3 items-start">
+          <div className="flex gap-3 items-start flex-wrap justify-end">
             <div>
               <label className="text-xs text-zinc-500 dark:text-zinc-400 block mb-1">
                 P&amp;L View
@@ -168,36 +159,15 @@ export default function Portfolio() {
           </div>
         </div>
 
-        {/* Refresh Status Indicator */}
-        {refreshStatus !== 'idle' && refreshStatus !== 'loading' && (
-          <div
-            className={cn(
-              "mt-3 px-3 py-2 rounded text-sm",
-              refreshStatus === 'success'
-                ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300"
-                : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300"
-            )}
-          >
-            {refreshResult && (
-              <>
-                {refreshResult.success.length > 0 && (
-                  <span>Updated: {refreshResult.success.join(', ')}</span>
-                )}
-                {refreshResult.failed.length > 0 && (
-                  <span className="block">Failed: {refreshResult.failed.join(', ')}</span>
-                )}
-                {refreshResult.skipped.length > 0 && refreshResult.success.length === 0 && refreshResult.failed.length === 0 && (
-                  <span>All prices are fresh</span>
-                )}
-              </>
-            )}
-          </div>
-        )}
-
         {/* Last Refreshed Timestamp */}
-        {lastRefreshed && (
-          <p className="mt-2 text-xs text-zinc-400 dark:text-zinc-500">
-            Prices last updated: {formatRelativeTime(lastRefreshed)}
+        <p className="mt-2 text-xs text-zinc-400 dark:text-zinc-500">
+          Last updated: {lastRefreshed ? formatTimestamp(lastRefreshed) : '—'}
+        </p>
+
+        {/* Refresh Failures */}
+        {refreshResult && refreshResult.failed.length > 0 && (
+          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+            Some tickers failed: {refreshResult.failed.join(', ')}
           </p>
         )}
         <div className="mt-3 grid gap-2">
@@ -246,11 +216,12 @@ export default function Portfolio() {
           </p>
         ) : (
           <div className="space-y-2">
-            {positions.map((position) => {
-              const isLeveraged = PortfolioService.isLeveraged(position)
-              const pnl = PortfolioService.getCombinedPnL(position)
-              const marketPriceStatus = PortfolioService.getMarketPriceWithStatus(position)
-              const effectivePriceInfo = PortfolioService.getEffectivePriceWithSource(position)
+            {positions.map((item) => {
+              const position = item.position
+              const isLeveraged = item.isLeveraged
+              const pnl = item.pnl
+              const marketPriceStatus = item.marketPriceStatus
+              const effectivePriceInfo = item.effectivePrice
 
               return (
                 <Link
@@ -283,26 +254,20 @@ export default function Portfolio() {
                       </span>
 
                       {/* Price Info */}
-                      <div className="flex gap-3 flex-wrap">
-                        {position.currentPrice !== undefined && (
-                          <span className="font-mono tabular-nums">
-                            Manual: ${position.currentPrice.toFixed(2)}
-                          </span>
-                        )}
-                        {marketPriceStatus.price !== null && (
-                          <span className={cn(
-                            "font-mono tabular-nums",
-                            marketPriceStatus.isStale && "text-amber-600 dark:text-amber-400"
-                          )}>
-                            Market: ${marketPriceStatus.price.toFixed(2)}
-                            {marketPriceStatus.isStale && " (stale)"}
-                          </span>
-                        )}
-                        {effectivePriceInfo.price !== null && (
-                          <span className="font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
-                            Using: {effectivePriceInfo.source}
-                          </span>
-                        )}
+                      <div className="flex gap-2 flex-wrap">
+                        <span className="font-mono tabular-nums">
+                          Manual: {position.currentPrice !== undefined ? `$${position.currentPrice.toFixed(2)}` : '—'}
+                        </span>
+                        <span className={cn(
+                          "font-mono tabular-nums",
+                          marketPriceStatus.isStale && "text-amber-600 dark:text-amber-400"
+                        )}>
+                          Market: {marketPriceStatus.price !== null ? `$${marketPriceStatus.price.toFixed(2)}` : '—'}
+                          {marketPriceStatus.isStale && " Stale"}
+                        </span>
+                        <span className="font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
+                          Using: {effectivePriceInfo.source}
+                        </span>
                       </div>
 
                       <span className="font-mono tabular-nums">Realized P&amp;L: {renderPnLValue(pnl.realized, isLeveraged)}</span>

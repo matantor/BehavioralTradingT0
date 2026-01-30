@@ -78,6 +78,16 @@ export function setCachedPrices(prices: CachedPrice[]): void {
   savePriceCache(cache)
 }
 
+// Remove a cached price by ticker
+export function removeCachedPrice(ticker: string): void {
+  const cache = loadPriceCache()
+  const normalizedTicker = ticker.toUpperCase()
+  if (cache.prices[normalizedTicker]) {
+    delete cache.prices[normalizedTicker]
+    savePriceCache(cache)
+  }
+}
+
 // Update refresh timestamps
 export function updateRefreshTimestamp(success: boolean): void {
   const cache = loadPriceCache()

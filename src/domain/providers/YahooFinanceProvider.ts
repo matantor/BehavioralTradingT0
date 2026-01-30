@@ -18,6 +18,9 @@ interface YahooQuoteResponse {
 export class YahooFinanceProvider implements PriceProvider {
   name = 'yahoo' as const
 
+  private readonly baseUrl = '/api/yahoo'
+  private readonly isDev = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true
+
   supports(assetType: AssetType): boolean {
     return assetType === 'equity' || assetType === 'etf'
   }
@@ -40,7 +43,11 @@ export class YahooFinanceProvider implements PriceProvider {
 
     try {
       // Yahoo Finance API endpoint
-      const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbols)}`
+      const url = `${this.baseUrl}/v7/finance/quote?symbols=${encodeURIComponent(symbols)}`
+
+      if (this.isDev) {
+        console.info('[YahooFinanceProvider] fetchQuotes URL:', url)
+      }
 
       const response = await fetch(url, {
         method: 'GET',
@@ -49,16 +56,21 @@ export class YahooFinanceProvider implements PriceProvider {
         },
       })
 
+      if (this.isDev) {
+        console.info('[YahooFinanceProvider] status:', response.status)
+      }
+
       if (!response.ok) {
-        console.warn(`Yahoo Finance API returned ${response.status}`)
-        return results
+        const error = new Error(`Yahoo Finance API returned ${response.status}`)
+        ;(error as { status?: number }).status = response.status
+        throw error
       }
 
       const data: YahooQuoteResponse = await response.json()
 
       if (data.quoteResponse.error) {
-        console.warn('Yahoo Finance API error:', data.quoteResponse.error)
-        return results
+        const error = new Error(`Yahoo Finance API error: ${data.quoteResponse.error.code}`)
+        throw error
       }
 
       for (const quote of data.quoteResponse.result) {
@@ -72,7 +84,12 @@ export class YahooFinanceProvider implements PriceProvider {
         }
       }
     } catch (error) {
-      console.warn('Yahoo Finance fetch failed:', error)
+      if (this.isDev) {
+        const message = error instanceof Error ? error.message : String(error)
+        console.warn('[YahooFinanceProvider] fetch failed:', message)
+      } else {
+        console.warn('Yahoo Finance fetch failed:', error)
+      }
       // Return empty results on network/parse error
     }
 

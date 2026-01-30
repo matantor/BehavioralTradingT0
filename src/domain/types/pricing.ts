@@ -5,7 +5,7 @@
 export type AssetType = 'equity' | 'etf' | 'crypto' | 'cash' | 'other'
 
 // Price provider identifier
-export type PriceProviderName = 'yahoo' | 'coingecko' | 'manual'
+export type PriceProviderName = 'yahoo' | 'alphavantage' | 'coingecko' | 'manual'
 
 // Cached price record
 export interface CachedPrice {

@@ -88,6 +88,16 @@ class PortfolioServiceClass {
    * Update a position
    */
   update(id: string, patch: Partial<Position>): Position {
+    const existing = PositionRepository.getById(id)
+    if (!existing) {
+      throw new Error(`Position ${id} not found`)
+    }
+
+    // If ticker changes or clears, invalidate cached market price for the old ticker
+    if (patch.ticker !== undefined && patch.ticker !== existing.ticker) {
+      PricingService.invalidatePrice(existing.ticker)
+    }
+
     return PositionRepository.update(id, patch)
   }
 
